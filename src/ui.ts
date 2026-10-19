@@ -19,6 +19,7 @@ export interface UIHandlers {
   onPlay: () => void
   onPause: () => void
   onRestart: () => void
+  onSeek: (seconds: number) => void
   onSelectSet: (setId: string) => void
   onDownload: () => void
   onReload: () => void
@@ -47,6 +48,7 @@ export class UI {
   private readonly nowPlaying: HTMLElement
   private readonly nowTitle: HTMLElement
   private readonly nowSet: HTMLElement
+  private readonly seekBar: HTMLElement
   private readonly progressFill: HTMLElement
   private readonly elapsed: HTMLElement
   private readonly remaining: HTMLElement
@@ -58,6 +60,8 @@ export class UI {
   private activeSetId: string | null = null
   private lastTrackId: string | null = null
   private lastPlaying = false
+  private duration = 0
+  private scrubbing = false
 
   constructor(root: HTMLElement, sets: TrackSet[], handlers: UIHandlers) {
     this.root = root
@@ -80,11 +84,15 @@ export class UI {
 
     this.setsNav = el('nav', { class: 'sets', 'aria-label': 'Sets' })
     this.songList = el('ol', { class: 'song-list' })
-    this.lyrics = new LyricsView()
+    this.lyrics = new LyricsView({ onSeek: (time) => this.handlers.onSeek(time) })
 
     this.nowTitle = el('div', { class: 'now-title' })
     this.nowSet = el('div', { class: 'now-set' })
     this.progressFill = el('div', { class: 'progress-fill' })
+    this.seekBar = el('div', { class: 'seek', role: 'slider', tabindex: '0', 'aria-label': 'Position', 'aria-valuemin': '0' }, [
+      el('div', { class: 'progress' }, [this.progressFill]),
+    ])
+    this.attachSeek()
     this.elapsed = el('span', { class: 'time-elapsed', text: '0:00' })
     this.remaining = el('span', { class: 'time-remaining', text: '0:00' })
 
@@ -97,7 +105,7 @@ export class UI {
 
     this.nowPlaying = el('footer', { class: 'now-playing', hidden: true }, [
       el('div', { class: 'now-text' }, [this.nowTitle, this.nowSet]),
-      el('div', { class: 'progress', role: 'progressbar' }, [this.progressFill]),
+      this.seekBar,
       el('div', { class: 'times' }, [this.elapsed, this.remaining]),
       el('div', { class: 'transport-row' }, [this.restartButton, this.playButton, this.pauseButton]),
     ])
@@ -196,11 +204,10 @@ export class UI {
 
     this.nowTitle.textContent = state.track.title
     this.nowSet.textContent = this.sets.length > 1 ? state.track.setName : ''
-    const ratio = state.duration > 0 ? Math.min(1, state.currentTime / state.duration) : 0
-    this.progressFill.style.transform = `scaleX(${ratio})`
-    this.elapsed.textContent = formatTime(state.currentTime)
-    this.remaining.textContent =
-      state.duration > 0 ? `\u2212${formatTime(state.duration - state.currentTime)}` : '\u2013:\u2013\u2013'
+    this.duration = state.duration
+    this.seekBar.setAttribute('aria-valuemax', String(Math.round(state.duration)))
+    // While dragging, the bar previews the drag position instead of the player's.
+    if (!this.scrubbing) this.renderPosition(state.currentTime)
 
     this.playButton.disabled = playing
     this.pauseButton.disabled = !playing
@@ -296,6 +303,55 @@ export class UI {
 
   destroy(): void {
     this.lyrics.stop()
+  }
+
+  private renderPosition(time: number): void {
+    const ratio = this.duration > 0 ? Math.min(1, time / this.duration) : 0
+    this.progressFill.style.transform = `scaleX(${ratio})`
+    this.seekBar.setAttribute('aria-valuenow', String(Math.round(time)))
+    this.elapsed.textContent = formatTime(time)
+    this.remaining.textContent = this.duration > 0 ? `\u2212${formatTime(this.duration - time)}` : '\u2013:\u2013\u2013'
+  }
+
+  // Tap or drag to seek. The seek is committed on release; the bar previews until then.
+  private attachSeek(): void {
+    const bar = this.seekBar
+    const timeAt = (event: PointerEvent): number => {
+      const rect = bar.getBoundingClientRect()
+      const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0
+      return Math.min(1, Math.max(0, ratio)) * this.duration
+    }
+    const finish = (event: PointerEvent) => {
+      if (!this.scrubbing) return
+      this.scrubbing = false
+      bar.classList.remove('is-scrubbing')
+      this.handlers.onSeek(timeAt(event))
+    }
+    bar.addEventListener('pointerdown', (event) => {
+      if (this.duration <= 0) return
+      event.preventDefault()
+      try {
+        bar.setPointerCapture(event.pointerId)
+      } catch {
+        // Synthetic events have no active pointer; the drag still works within the bar.
+      }
+      this.scrubbing = true
+      bar.classList.add('is-scrubbing')
+      this.renderPosition(timeAt(event))
+    })
+    bar.addEventListener('pointermove', (event) => {
+      if (this.scrubbing) this.renderPosition(timeAt(event))
+    })
+    bar.addEventListener('pointerup', finish)
+    bar.addEventListener('pointercancel', finish)
+    bar.addEventListener('keydown', (event) => {
+      if (this.duration <= 0) return
+      const step = event.key === 'ArrowRight' ? 5 : event.key === 'ArrowLeft' ? -5 : 0
+      if (step === 0) return
+      event.preventDefault()
+      const current = Number(bar.getAttribute('aria-valuenow') ?? 0)
+      this.handlers.onSeek(Math.min(this.duration, Math.max(0, current + step)))
+    })
   }
 
   private renderSets(): void {

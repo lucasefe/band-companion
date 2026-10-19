@@ -54,6 +54,26 @@ check('current line follows time', await leader.waitFor('document.querySelector(
 await sleep(600)
 await shot(leader, 'phone-playing')
 
+// --- Seeking: tap a lyric line, drag the bar ----------------------------------
+
+await leader.evaluate('[...document.querySelectorAll(".lyric")].find((l) => l.textContent.startsWith("No podrás olvidar")).click()')
+check('tap lyric seeks', await leader.waitFor('Math.abs(document.getElementById("audio").currentTime - 81.856) < 1.5', 3000), `t=${(await leader.evaluate('document.getElementById("audio").currentTime')).toFixed(2)}`)
+check('tapped line is current', await leader.waitFor('document.querySelector(".lyric.is-current")?.textContent.startsWith("No podrás olvidar")', 2000))
+
+const duration = await leader.evaluate('document.getElementById("audio").duration')
+const expected = Math.floor(duration * 0.75)
+const expectedLabel = `${Math.floor(expected / 60)}:${String(expected % 60).padStart(2, '0')}`
+const bar = await leader.evaluate('(() => { const r = document.querySelector(".seek").getBoundingClientRect(); return { x: r.left + r.width * 0.25, y: r.top + r.height / 2, x2: r.left + r.width * 0.75 } })()')
+await leader.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: bar.x, y: bar.y, button: 'left', clickCount: 1 })
+await leader.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: bar.x2, y: bar.y, button: 'left' })
+await sleep(100)
+check('bar previews while dragging', await leader.evaluate(`document.querySelector(".seek").classList.contains("is-scrubbing") && document.querySelector(".time-elapsed").textContent === "${expectedLabel}"`), `${await leader.evaluate('document.querySelector(".time-elapsed").textContent')} (expected ${expectedLabel})`)
+await leader.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: bar.x2, y: bar.y, button: 'left', clickCount: 1 })
+check('drag bar seeks to 75%', await leader.waitFor(`Math.abs(document.getElementById("audio").currentTime - ${duration * 0.75}) < 2`, 3000), `t=${(await leader.evaluate('document.getElementById("audio").currentTime')).toFixed(1)} of ${duration.toFixed(1)}`)
+check('bar back to live', await leader.evaluate('!document.querySelector(".seek").classList.contains("is-scrubbing")'))
+await leader.evaluate('document.getElementById("audio").currentTime = 52')
+await sleep(300)
+
 // --- Follower on a second device --------------------------------------------
 
 const follower = await chrome.newPage()
@@ -64,6 +84,12 @@ check('follower sees title', await follower.waitFor('document.querySelector(".no
 check('follower line matches leader', await follower.waitFor('document.querySelector(".lyric.is-current")?.textContent === document.querySelector(".lyric.is-current")?.textContent && /Cada momento, voy|Y es que no queda/.test(document.querySelector(".lyric.is-current")?.textContent ?? "")', 5000), await follower.evaluate('document.querySelector(".lyric.is-current")?.textContent'))
 check('leader counts follower', await leader.waitFor('document.querySelector(".chip-live").textContent === "Leader · 1"', 5000), await leader.evaluate('document.querySelector(".chip-live").textContent'))
 await shot(follower, 'follower-live')
+
+await leader.evaluate('[...document.querySelectorAll(".lyric")].find((l) => l.textContent.startsWith("Si estoy llorando")).click()')
+check('follower follows lyric tap', await follower.waitFor('document.querySelector(".lyric.is-current")?.textContent.startsWith("Si estoy llorando")', 5000), await follower.evaluate('document.querySelector(".lyric.is-current")?.textContent'))
+check('follower lyrics not tappable', await follower.evaluate('!document.querySelector(".lyrics").classList.contains("is-seekable") && document.querySelector(".lyric").getAttribute("role") === null'))
+await leader.evaluate('document.getElementById("audio").currentTime = 52')
+await sleep(300)
 
 // --- Listening on the follower -----------------------------------------------
 

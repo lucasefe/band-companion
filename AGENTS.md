@@ -42,7 +42,8 @@ Backing-track player with live lyrics for a band. One device (leader) plays the 
 
 ## Player / UI constraints
 
-- Tapping a song loads it (`Player.select`) and opens the lyrics view; Play / Pause / Restart act on the loaded track. Restart preserves playing/paused state.
+- Tapping a song loads it (`Player.select`) and opens the lyrics view; Play / Pause / Restart act on the loaded track. Restart is `seek(0)`; seeks preserve playing/paused state.
+- Leader-only seeking: `.seek` (slider around the 6 px bar, negative margins give a 44 px target) previews during the drag and commits on release; `updatePlayer` skips the position while `scrubbing`. `LyricsView({ onSeek })` makes timed lines `role=button`; the follower constructs it without `onSeek`. `touchmove`/`wheel` on the lyrics hold auto-scroll for 4 s (`READ_AHEAD_HOLD`) so reading ahead is not fought; a tap does not trigger the hold.
 - `audio.play()` must be called synchronously inside the tap handler (iOS). No `await` before it.
 - Screen Wake Lock is requested on a tap and re-acquired on `visibilitychange`. Followers get it from any `pointerdown`.
 - `[hidden] { display: none !important }` is relied on; views are switched with `#app.view-songs` / `#app.view-lyrics` classes instead of `hidden` because the ≥ 700 px layout shows both. `#app.follow` is the follower layout.

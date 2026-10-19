@@ -3,12 +3,20 @@ import { currentLine, type Lyrics } from './lyrics'
 const GAP = '\u00b7 \u00b7 \u00b7'
 // Keep the current line this far down the viewport so the next lines are visible.
 const ANCHOR = 0.38
+// After the user scrolls, leave the list alone for this long.
+const READ_AHEAD_HOLD = 4000
+
+export interface LyricsViewOptions {
+  // When set, tapping a timed line calls it with the line's time.
+  onSeek?: (time: number) => void
+}
 
 export class LyricsView {
   readonly element: HTMLElement
 
   private readonly list: HTMLOListElement
   private readonly empty: HTMLElement
+  private readonly onSeek: ((time: number) => void) | undefined
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
 
   private lyrics: Lyrics | null = null
@@ -16,8 +24,11 @@ export class LyricsView {
   private active = -1
   private clock: (() => number) | null = null
   private frame = 0
+  private holdUntil = 0
+  private scrollPending = false
 
-  constructor() {
+  constructor(options: LyricsViewOptions = {}) {
+    this.onSeek = options.onSeek
     this.list = document.createElement('ol')
     this.list.className = 'lyrics-lines'
     this.empty = document.createElement('p')
@@ -26,6 +37,15 @@ export class LyricsView {
     this.element.className = 'lyrics'
     this.element.setAttribute('aria-label', 'Lyrics')
     this.element.append(this.empty, this.list)
+    this.element.classList.toggle('is-seekable', this.onSeek !== undefined)
+
+    // A tap does not fire these; only an actual scroll gesture does.
+    const hold = () => {
+      this.holdUntil = performance.now() + READ_AHEAD_HOLD
+    }
+    this.element.addEventListener('touchmove', hold, { passive: true })
+    this.element.addEventListener('wheel', hold, { passive: true })
+
     this.setLyrics(null, 'Tap a song')
   }
 
@@ -34,6 +54,8 @@ export class LyricsView {
     this.lyrics = lyrics
     this.active = -1
     this.items = []
+    this.holdUntil = 0
+    this.scrollPending = false
     this.list.replaceChildren()
     this.element.scrollTop = 0
 
@@ -46,6 +68,7 @@ export class LyricsView {
       return
     }
 
+    const seekable = this.onSeek !== undefined && lyrics.timed
     for (const line of lyrics.lines) {
       const item = document.createElement('li')
       item.className = 'lyric'
@@ -54,6 +77,21 @@ export class LyricsView {
         item.textContent = lyrics.timed ? GAP : ''
       } else {
         item.textContent = line.text
+      }
+      if (seekable) {
+        item.setAttribute('role', 'button')
+        item.tabIndex = 0
+        const seek = () => {
+          this.holdUntil = 0
+          this.onSeek!(line.time!)
+        }
+        item.addEventListener('click', seek)
+        item.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            seek()
+          }
+        })
       }
       this.items.push(item)
       this.list.append(item)
@@ -81,7 +119,10 @@ export class LyricsView {
   update(time: number): void {
     if (!this.lyrics?.timed) return
     const index = currentLine(this.lyrics.lines, time)
-    if (index === this.active) return
+    if (index === this.active) {
+      if (this.scrollPending && !this.holding()) this.scrollToActive()
+      return
+    }
 
     const previous = this.items[this.active]
     previous?.classList.remove('is-current')
@@ -89,14 +130,20 @@ export class LyricsView {
       this.items[i]!.classList.toggle('is-past', i < index)
     }
     this.active = index
+    this.items[index]?.classList.add('is-current')
 
-    const item = this.items[index]
-    if (!item) {
-      this.element.scrollTo({ top: 0, behavior: this.behavior() })
-      return
-    }
-    item.classList.add('is-current')
-    const top = item.offsetTop - this.element.clientHeight * ANCHOR + item.offsetHeight / 2
+    if (this.holding()) this.scrollPending = true
+    else this.scrollToActive()
+  }
+
+  private holding(): boolean {
+    return performance.now() < this.holdUntil
+  }
+
+  private scrollToActive(): void {
+    this.scrollPending = false
+    const item = this.items[this.active]
+    const top = item ? item.offsetTop - this.element.clientHeight * ANCHOR + item.offsetHeight / 2 : 0
     this.element.scrollTo({ top: Math.max(0, top), behavior: this.behavior() })
   }
 

@@ -13,7 +13,8 @@ Everyone opens the same URL and starts as a follower.
 1. Tap **Lead** at the top and enter the leader key. The device switches to the player.
 2. **Tap a song** to load it. Nothing plays yet; the lyrics open and the transport appears at the bottom. **‹ Songs** goes back to the list (on an iPad the list and the lyrics sit side by side).
 3. **Play** starts the track, or resumes from where you paused. **Pause** keeps the position. **Restart** goes back to the top; if it was playing it keeps playing.
-4. Loading another song unloads the current one. When a track ends it rewinds and waits.
+4. To jump somewhere, **tap a lyric line** and playback moves to it, or **tap or drag the progress bar** (the time shows where you’ll land; it seeks when you let go). Followers jump along. Scrolling the lyrics never seeks, and the list stops auto‑scrolling for a few seconds while you read ahead.
+5. Loading another song unloads the current one. When a track ends it rewinds and waits.
 
 The chips at the top show status: **Offline · xx MB** (all tracks stored on the device) or **Download N tracks** (tap to store them), **Awake** (screen won’t lock), and **Leader · N** (connected, N followers). Tap **Leader** to step down.
 

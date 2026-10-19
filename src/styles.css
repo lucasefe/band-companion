@@ -420,6 +420,23 @@ button.chip:not(:disabled):active {
   opacity: 1;
 }
 
+/* Leader: tapping a timed line seeks to it. */
+.lyrics.is-seekable.is-timed .lyric {
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.lyrics.is-seekable.is-timed .lyric:active {
+  color: var(--text);
+  opacity: 1;
+  background: var(--surface);
+}
+
+.lyrics.is-seekable.is-timed .lyric:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Now playing */
 
 .now-playing {
@@ -453,11 +470,33 @@ button.chip:not(:disabled):active {
   color: var(--muted);
 }
 
+/* The bar is 6 px tall; the slider around it gives a 44 px touch target
+   without changing the layout. */
+.seek {
+  padding: 19px 0;
+  margin: -19px 0;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.seek:focus-visible {
+  outline: none;
+}
+
+.seek:focus-visible .progress {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
 .progress {
   height: 6px;
   border-radius: 3px;
   background: var(--border);
   overflow: hidden;
+  transition: transform 120ms ease;
+}
+
+.seek.is-scrubbing .progress {
+  transform: scaleY(1.8);
 }
 
 .progress-fill {
@@ -466,6 +505,10 @@ button.chip:not(:disabled):active {
   transform-origin: left center;
   transform: scaleX(0);
   will-change: transform;
+}
+
+.seek.is-scrubbing ~ .times {
+  color: var(--accent);
 }
 
 .times {
@@ -697,7 +740,7 @@ button.chip:not(:disabled):active {
     grid-area: text;
   }
 
-  .progress {
+  .seek {
     grid-area: bar;
   }
 

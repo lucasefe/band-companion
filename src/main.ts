@@ -60,6 +60,9 @@ function mountLeader(key: string): Mounted {
     onRestart() {
       player.restart()
     },
+    onSeek(seconds) {
+      player.seek(seconds)
+    },
     onSelectSet(setId) {
       ui.selectSet(setId)
     },

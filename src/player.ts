@@ -99,9 +99,16 @@ export class Player {
 
   // Rewinds to the start and keeps the current playing/paused state.
   restart(): void {
+    this.seek(0)
+  }
+
+  // Jumps to `seconds`, keeping the current playing/paused state.
+  seek(seconds: number): void {
     if (!this.state.track) return
-    this.audio.currentTime = 0
-    this.patch({ currentTime: 0 })
+    const duration = this.audio.duration
+    const time = Math.max(0, Number.isFinite(duration) ? Math.min(seconds, duration) : seconds)
+    this.audio.currentTime = time
+    this.patch({ currentTime: time })
   }
 
   private syncTime(): void {
