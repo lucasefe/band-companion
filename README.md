@@ -19,8 +19,17 @@ tracks/
 
 - A leading number controls the order and is stripped from the name shown.
 - Folders become set tabs. Files placed directly in `tracks/` go into a set called “Songs”. With a single set the tabs are hidden.
-- Supported: `.mp3`, `.m4a`, `.aac`, `.wav`, `.ogg`. Use MP3 or AAC. Cloudflare rejects files over 25 MB, which rules out WAV for anything longer than a couple of minutes.
-- The three files in `tracks/` now are test tones. Delete them when you add real tracks.
+- The app plays `.mp3` and `.m4a`. Cloudflare rejects files over 25 MB, so WAV cannot be deployed directly.
+
+### WAV, AIFF, or FLAC sources
+
+Drop them in the same folders and run:
+
+```
+npm run convert
+```
+
+Each one gets a 320 kbps MP3 next to it (`02 - Roam.wav` → `02 - Roam.mp3`); sources whose MP3 is already up to date are skipped. The script needs `ffmpeg` (`brew install ffmpeg`) and also runs automatically before `npm run build`. Lossless sources are git‑ignored, so only the MP3s are committed.
 
 Commit, push, and the site redeploys.
 

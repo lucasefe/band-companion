@@ -3,3 +3,9 @@ dist
 dev-dist
 .DS_Store
 *.local
+
+# Lossless sources stay local; commit the MP3s produced by `npm run convert`.
+tracks/**/*.wav
+tracks/**/*.aif
+tracks/**/*.aiff
+tracks/**/*.flac

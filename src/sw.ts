@@ -7,7 +7,7 @@ import { NavigationRoute, registerRoute } from 'workbox-routing'
 declare let self: ServiceWorkerGlobalScope
 
 const TRACK_CACHE = 'tracks-v1'
-const TRACK_EXT = /\.(mp3|m4a|aac|wav|ogg)$/i
+const TRACK_EXT = /\.(mp3|m4a)$/i
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting()

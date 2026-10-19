@@ -16,7 +16,9 @@ export interface TrackSet {
 
 const DEFAULT_SET = 'Songs'
 
-const files = import.meta.glob('/tracks/**/*.{mp3,m4a,aac,wav,ogg}', {
+// Lossless sources (wav/aiff/flac) are converted by scripts/convert.mjs and
+// deliberately not listed here.
+const files = import.meta.glob('/tracks/**/*.{mp3,m4a}', {
   eager: true,
   query: '?url',
   import: 'default',
