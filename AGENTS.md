@@ -45,7 +45,7 @@ Backing-track player with live lyrics for a band. One device (leader) plays the 
 - Tapping a song loads it (`Player.select`) and opens the lyrics view; Play / Pause / Restart act on the loaded track. Restart is `seek(0)`; seeks preserve playing/paused state.
 - Leader-only seeking: `.seek` (slider around the 6 px bar, negative margins give a 44 px target) previews during the drag and commits on release; `updatePlayer` skips the position while `scrubbing`. `LyricsView({ onSeek })` makes timed lines `role=button`; the follower constructs it without `onSeek`. `touchmove`/`wheel` on the lyrics hold auto-scroll for 4 s (`READ_AHEAD_HOLD`) so reading ahead is not fought; a tap does not trigger the hold.
 - `audio.play()` must be called synchronously inside the tap handler (iOS). No `await` before it.
-- Screen Wake Lock is requested on a tap and re-acquired on `visibilitychange`. Followers get it from any `pointerdown`.
+- Screen Wake Lock: WebKit grants `wakeLock.request()` only with transient user activation (then remembers it for the page). On touch, `pointerdown` has no activation, `pointerup`/`click` do — request from those. `wakelock.ts` retries on any later `pointerup`/`keydown` while wanted and unheld, so a refused request heals on the next tap; it is re-acquired on `visibilitychange`.
 - `[hidden] { display: none !important }` is relied on; views are switched with `#app.view-songs` / `#app.view-lyrics` classes instead of `hidden` because the ≥ 700 px layout shows both. `#app.follow` is the follower layout.
 - `#app` grid rows are pinned with `grid-row` on each child because the set bar can be `display: none`.
 - `LyricsView` uses `offsetTop` relative to `.lyrics`, which must stay `position: relative`.

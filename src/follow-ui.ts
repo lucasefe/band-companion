@@ -94,7 +94,9 @@ export class FollowUI {
     )
     root.classList.add('follow')
     root.classList.remove('view-songs', 'view-lyrics')
-    root.addEventListener('pointerdown', () => this.handlers.onTap())
+    // pointerup, not pointerdown: on touch only the former counts as a user
+    // gesture, which the wake lock request needs.
+    root.addEventListener('pointerup', () => this.handlers.onTap())
   }
 
   update(view: FollowerView, clock: () => number): void {

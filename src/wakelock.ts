@@ -3,6 +3,7 @@ export type WakeLockStatus = 'unsupported' | 'inactive' | 'active' | 'denied'
 type Listener = (status: WakeLockStatus) => void
 
 let sentinel: WakeLockSentinel | null = null
+let acquiring = false
 let wanted = false
 let status: WakeLockStatus = 'wakeLock' in navigator ? 'inactive' : 'unsupported'
 const listeners = new Set<Listener>()
@@ -14,7 +15,8 @@ function setStatus(next: WakeLockStatus): void {
 }
 
 async function acquire(): Promise<void> {
-  if (status === 'unsupported' || sentinel || document.visibilityState !== 'visible') return
+  if (status === 'unsupported' || sentinel || acquiring || document.visibilityState !== 'visible') return
+  acquiring = true
   try {
     sentinel = await navigator.wakeLock.request('screen')
     sentinel.addEventListener('release', () => {
@@ -24,6 +26,8 @@ async function acquire(): Promise<void> {
     setStatus('active')
   } catch {
     setStatus('denied')
+  } finally {
+    acquiring = false
   }
 }
 
@@ -43,3 +47,16 @@ export function subscribeWakeLock(listener: Listener): () => void {
 document.addEventListener('visibilitychange', () => {
   if (wanted && document.visibilityState === 'visible') void acquire()
 })
+
+// WebKit grants the lock only inside a user gesture (and remembers that for the
+// rest of the page's life). On touch screens pointerdown carries no activation,
+// pointerup does; so a refused request is retried on the next gesture.
+for (const type of ['pointerup', 'keydown'] as const) {
+  document.addEventListener(
+    type,
+    () => {
+      if (wanted && !sentinel) void acquire()
+    },
+    { capture: true, passive: true },
+  )
+}

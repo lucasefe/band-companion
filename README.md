@@ -43,7 +43,7 @@ Leader (iPhone or iPad on the console):
 1. Open the site in Safari, then Share → **Add to Home Screen**. Launch it from the icon from now on.
 2. Tap **Lead** and enter the key.
 3. Tap **Download N tracks** while on Wi‑Fi. When it reads **Offline · xx MB**, every track is on the device and playback works with no connection. After new songs are deployed, the chip shows how many are missing; tap it again.
-4. Tap any song once. The chip switches to **Awake**. If it says **Can’t keep awake**, set Settings → Display & Brightness → Auto‑Lock → Never for the gig.
+4. Tap any song once. The chip switches to **Awake**. If it says **Can’t keep awake**, tap once more; if it still does, set Settings → Display & Brightness → Auto‑Lock → Never for the gig.
 5. Optional: Settings → Accessibility → Guided Access locks the device to this app.
 6. Plug into the console with a USB‑C (or Lightning) audio adapter or interface. Audio plays regardless of the ring/silent switch.
 
