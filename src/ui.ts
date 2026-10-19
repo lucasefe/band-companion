@@ -12,8 +12,10 @@ export type OfflineView =
   | { kind: 'error'; message: string }
 
 export interface UIHandlers {
-  onToggle: (track: Track) => void
-  onStop: () => void
+  onSelect: (track: Track) => void
+  onPlay: () => void
+  onPause: () => void
+  onRestart: () => void
   onSelectSet: (setId: string) => void
   onDownload: () => void
   onReload: () => void
@@ -60,11 +62,14 @@ export class UI {
   private readonly progressFill: HTMLElement
   private readonly elapsed: HTMLElement
   private readonly remaining: HTMLElement
-  private readonly stopButton: HTMLButtonElement
+  private readonly playButton: HTMLButtonElement
+  private readonly pauseButton: HTMLButtonElement
+  private readonly restartButton: HTMLButtonElement
   private readonly toast: HTMLElement
 
   private activeSetId: string | null = null
   private lastTrackId: string | null = null
+  private lastPlaying = false
 
   constructor(root: HTMLElement, sets: TrackSet[], handlers: UIHandlers) {
     this.sets = sets
@@ -82,14 +87,19 @@ export class UI {
     this.progressFill = el('div', { class: 'progress-fill' })
     this.elapsed = el('span', { class: 'time-elapsed', text: '0:00' })
     this.remaining = el('span', { class: 'time-remaining', text: '0:00' })
-    this.stopButton = el('button', { class: 'stop', type: 'button', text: 'Stop' })
-    this.stopButton.addEventListener('click', () => this.handlers.onStop())
+
+    this.restartButton = el('button', { class: 'transport transport-restart', type: 'button', text: 'Restart' })
+    this.playButton = el('button', { class: 'transport transport-play', type: 'button', text: 'Play' })
+    this.pauseButton = el('button', { class: 'transport transport-pause', type: 'button', text: 'Pause' })
+    this.restartButton.addEventListener('click', () => this.handlers.onRestart())
+    this.playButton.addEventListener('click', () => this.handlers.onPlay())
+    this.pauseButton.addEventListener('click', () => this.handlers.onPause())
 
     this.nowPlaying = el('footer', { class: 'now-playing', hidden: true }, [
       el('div', { class: 'now-text' }, [this.nowTitle, this.nowSet]),
       el('div', { class: 'progress', role: 'progressbar' }, [this.progressFill]),
       el('div', { class: 'times' }, [this.elapsed, this.remaining]),
-      this.stopButton,
+      el('div', { class: 'transport-row' }, [this.restartButton, this.playButton, this.pauseButton]),
     ])
 
     const reload = el('button', { class: 'toast-action', type: 'button', text: 'Reload' })
@@ -127,16 +137,23 @@ export class UI {
   }
 
   updatePlayer(state: PlayerState): void {
-    const active = state.status === 'playing' || state.status === 'loading'
-    const trackId = state.track?.id ?? null
+    const selected = state.track !== null && state.status !== 'idle'
+    const playing = state.status === 'playing' || state.status === 'loading'
+    const trackId = selected ? state.track!.id : null
 
-    if (this.lastTrackId !== trackId || !active) {
+    if (this.lastTrackId !== trackId || this.lastPlaying !== playing) {
       for (const [id, button] of this.songButtons) {
-        const isCurrent = active && id === trackId
-        button.classList.toggle('is-playing', isCurrent)
-        button.setAttribute('aria-pressed', String(isCurrent))
+        const isSelected = id === trackId
+        button.classList.toggle('is-selected', isSelected)
+        button.classList.toggle('is-playing', isSelected && playing)
+        button.setAttribute('aria-pressed', String(isSelected))
+        const label = button.querySelector('.song-state')
+        if (label && !button.classList.contains('is-error')) {
+          label.textContent = isSelected ? (playing ? '' : 'Loaded') : ''
+        }
       }
-      this.lastTrackId = active ? trackId : null
+      this.lastTrackId = trackId
+      this.lastPlaying = playing
     }
 
     if (state.status === 'error' && state.track) {
@@ -153,8 +170,8 @@ export class UI {
       }
     }
 
-    this.nowPlaying.hidden = !active
-    if (!active || !state.track) return
+    this.nowPlaying.hidden = !selected
+    if (!selected || !state.track) return
 
     this.nowTitle.textContent = state.track.title
     this.nowSet.textContent = this.sets.length > 1 ? state.track.setName : ''
@@ -163,7 +180,11 @@ export class UI {
     this.elapsed.textContent = formatTime(state.currentTime)
     this.remaining.textContent =
       state.duration > 0 ? `\u2212${formatTime(state.duration - state.currentTime)}` : '\u2013:\u2013\u2013'
-    this.stopButton.textContent = state.status === 'loading' ? 'Loading\u2026' : 'Stop'
+
+    this.playButton.disabled = playing
+    this.pauseButton.disabled = !playing
+    this.playButton.textContent = state.status === 'loading' ? 'Loading\u2026' : 'Play'
+    this.nowPlaying.classList.toggle('is-playing', playing)
   }
 
   updateWake(status: WakeLockStatus): void {
@@ -251,7 +272,7 @@ export class UI {
         el('span', { class: 'song-title', text: track.title }),
         el('span', { class: 'song-state' }),
       ])
-      button.addEventListener('click', () => this.handlers.onToggle(track))
+      button.addEventListener('click', () => this.handlers.onSelect(track))
       this.songButtons.set(track.id, button)
       this.songList.append(el('li', {}, [button]))
     })

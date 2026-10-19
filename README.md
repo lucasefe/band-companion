@@ -1,6 +1,6 @@
 # Band Companion
 
-A backing‑track player for live sets. Open it on a phone or iPad plugged into the console, tap a song, play along. One track at a time; tapping another song stops the current one; tapping the playing song stops it.
+A backing‑track player for live sets. Open it on a phone or iPad plugged into the console, tap a song to load it, hit Play, play along. One track at a time: Pause keeps your place, Restart goes back to the top (and stays paused if you were paused), and loading another song unloads the current one.
 
 It is a static web app (Vite + TypeScript) that runs as a Home Screen web app on iOS. It keeps the screen awake while a track is playing and can store every track on the device so it works with no internet at the venue.
 
@@ -62,7 +62,7 @@ When a new version has been deployed, an **Update available** pill appears. Tap 
 ## How it works
 
 - `src/tracks.ts` discovers audio files at build time with `import.meta.glob`, so there is no manifest to maintain.
-- `src/player.ts` wraps a single `<audio>` element and enforces the one‑at‑a‑time rules. Playback starts synchronously inside the tap handler, which iOS requires.
+- `src/player.ts` wraps a single `<audio>` element: select loads a track without playing, then Play / Pause / Restart act on it. Playback starts synchronously inside the tap handler, which iOS requires. When a track ends it rewinds and waits.
 - `src/wakelock.ts` uses the Screen Wake Lock API and re‑acquires the lock whenever the app returns to the foreground.
 - `src/offline.ts` downloads tracks into the Cache Storage API. `src/sw.ts` (Workbox) precaches the app shell and serves cached tracks, slicing them to satisfy the byte‑range requests Safari makes for audio.
 - `src/ui.ts` renders the set tabs, song list, and now‑playing bar. Mobile first; two columns on wider screens.

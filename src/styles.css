@@ -51,9 +51,26 @@ body {
 
 #app {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   grid-template-columns: minmax(0, 1fr);
   height: 100dvh;
+}
+
+/* Explicit rows so a hidden set bar does not shift the others. */
+.topbar {
+  grid-row: 1;
+}
+
+.sets {
+  grid-row: 2;
+}
+
+.songs {
+  grid-row: 3;
+}
+
+.now-playing {
+  grid-row: 4;
 }
 
 [hidden] {
@@ -262,12 +279,12 @@ button.chip:not(:disabled):active {
   white-space: nowrap;
 }
 
-.song.is-playing {
+.song.is-selected {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
 
-.song.is-playing .song-index {
+.song.is-selected .song-index {
   color: var(--accent);
 }
 
@@ -367,20 +384,42 @@ button.chip:not(:disabled):active {
   font-variant-numeric: tabular-nums;
 }
 
-.stop {
+.transport-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr;
+  gap: 8px;
+}
+
+.transport {
   min-height: var(--tap);
   border-radius: var(--radius);
-  background: var(--danger);
-  color: #fff;
-  font-size: 18px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 17px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  transition: opacity 120ms ease;
 }
 
-.stop:active {
+.transport:active:not(:disabled) {
   transform: scale(0.985);
   filter: brightness(0.9);
+}
+
+.transport:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.transport-play {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.transport-pause {
+  background: var(--danger);
+  color: #fff;
 }
 
 /* Update toast */
@@ -442,9 +481,9 @@ button.chip:not(:disabled):active {
   .now-playing {
     grid-template-columns: 1fr auto;
     grid-template-areas:
-      'text stop'
-      'bar stop'
-      'times stop';
+      'text transport'
+      'bar transport'
+      'times transport';
     column-gap: 24px;
     align-items: center;
   }
@@ -461,9 +500,9 @@ button.chip:not(:disabled):active {
     grid-area: times;
   }
 
-  .stop {
-    grid-area: stop;
-    min-width: 180px;
+  .transport-row {
+    grid-area: transport;
+    grid-template-columns: 140px 180px 140px;
     align-self: stretch;
   }
 }

@@ -17,12 +17,19 @@ let updateSW: ((reload?: boolean) => Promise<void>) | null = null
 let downloading = false
 
 const ui = new UI(root, sets, {
-  onToggle(track) {
+  onSelect(track) {
     keepAwake()
-    player.toggle(track)
+    player.select(track)
   },
-  onStop() {
-    player.stop()
+  onPlay() {
+    keepAwake()
+    player.play()
+  },
+  onPause() {
+    player.pause()
+  },
+  onRestart() {
+    player.restart()
   },
   onSelectSet(setId) {
     ui.selectSet(setId)
