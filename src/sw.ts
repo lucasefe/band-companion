@@ -7,7 +7,7 @@ import { NavigationRoute, registerRoute } from 'workbox-routing'
 declare let self: ServiceWorkerGlobalScope
 
 const TRACK_CACHE = 'tracks-v1'
-const TRACK_EXT = /\.(mp3|m4a)$/i
+const AUDIO_PATH = /^\/audio\//
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting()
@@ -22,7 +22,7 @@ registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')))
 // Tracks are written to the cache by the app (see src/offline.ts); here we only
 // read. Safari asks for audio in byte ranges, so cached responses are sliced.
 registerRoute(
-  ({ url, request }) => request.method === 'GET' && url.origin === self.location.origin && TRACK_EXT.test(url.pathname),
+  ({ url, request }) => request.method === 'GET' && url.origin === self.location.origin && AUDIO_PATH.test(url.pathname),
   async ({ request }) => {
     const cache = await caches.open(TRACK_CACHE)
     const cached = await cache.match(request.url)

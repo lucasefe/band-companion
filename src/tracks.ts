@@ -1,7 +1,12 @@
+import { parseLyrics, type Lyrics } from './lyrics'
+import audioManifest from '../tracks/audio.json'
+
 export interface Track {
   id: string
   title: string
   url: string
+  bytes: number
+  lyrics: Lyrics | null
   setId: string
   setName: string
   order: number
@@ -14,13 +19,21 @@ export interface TrackSet {
   tracks: Track[]
 }
 
+interface AudioEntry {
+  key: string
+  bytes: number
+}
+
 const DEFAULT_SET = 'Songs'
 
-// Lossless sources (wav/aiff/flac) are converted by scripts/convert.mjs and
-// deliberately not listed here.
-const files = import.meta.glob('/tracks/**/*.{mp3,m4a}', {
+// Each track is a folder: tracks/<set>/<NN - Title>/ holding one audio file
+// (uploaded to R2 by scripts/sync-audio.mjs, listed in tracks/audio.json)
+// and optionally one .lrc or .txt with the lyrics.
+const audio = audioManifest as Record<string, AudioEntry>
+
+const lyricFiles = import.meta.glob('/tracks/**/*.{lrc,txt}', {
   eager: true,
-  query: '?url',
+  query: '?raw',
   import: 'default',
 }) as Record<string, string>
 
@@ -36,29 +49,51 @@ function compare(a: { order: number; name: string }, b: { order: number; name: s
   return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
 }
 
-export function loadSets(): TrackSet[] {
-  const sets = new Map<string, TrackSet>()
-
-  for (const [path, url] of Object.entries(files)) {
+function loadLyrics(): Map<string, Lyrics> {
+  const result = new Map<string, Lyrics>()
+  for (const [path, text] of Object.entries(lyricFiles)) {
     const parts = path.replace(/^\/tracks\//, '').split('/')
     const file = parts.pop()!
-    const folder = parts.join('/') || DEFAULT_SET
-    const setInfo = parseName(folder)
-    const trackInfo = parseName(file.replace(/\.[^.]+$/, ''))
+    const folder = parts.join('/')
+    const kind = file.toLowerCase().endsWith('.lrc') ? 'lrc' : 'txt'
+    // An .lrc wins over a .txt in the same folder.
+    if (result.has(folder) && kind === 'txt') continue
+    result.set(folder, parseLyrics(text, kind))
+  }
+  return result
+}
 
-    let set = sets.get(folder)
+export function loadSets(): TrackSet[] {
+  const sets = new Map<string, TrackSet>()
+  const lyrics = loadLyrics()
+
+  for (const [folder, entry] of Object.entries(audio)) {
+    const parts = folder.split('/')
+    const trackFolder = parts.pop()!
+    const setFolder = parts.join('/') || DEFAULT_SET
+    const setInfo = parseName(setFolder)
+    const trackInfo = parseName(trackFolder)
+
+    let set = sets.get(setFolder)
     if (!set) {
-      set = { id: folder, name: setInfo.name, order: setInfo.order, tracks: [] }
-      sets.set(folder, set)
+      set = { id: setFolder, name: setInfo.name, order: setInfo.order, tracks: [] }
+      sets.set(setFolder, set)
     }
     set.tracks.push({
-      id: path,
+      id: folder,
       title: trackInfo.name,
-      url,
-      setId: folder,
+      url: `/audio/${entry.key}`,
+      bytes: entry.bytes,
+      lyrics: lyrics.get(folder) ?? null,
+      setId: setFolder,
       setName: setInfo.name,
       order: trackInfo.order,
     })
+    lyrics.delete(folder)
+  }
+
+  for (const folder of lyrics.keys()) {
+    console.warn(`Lyrics without audio in tracks/${folder}; run npm run sync-audio.`)
   }
 
   const result = [...sets.values()]
@@ -73,4 +108,12 @@ export function loadSets(): TrackSet[] {
 
 export function allTracks(sets: TrackSet[]): Track[] {
   return sets.flatMap((s) => s.tracks)
+}
+
+export function findTrack(sets: TrackSet[], id: string): Track | null {
+  for (const set of sets) {
+    const track = set.tracks.find((t) => t.id === id)
+    if (track) return track
+  }
+  return null
 }

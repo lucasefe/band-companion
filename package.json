@@ -8,11 +8,13 @@
   },
   "scripts": {
     "dev": "vite --host",
-    "convert": "node scripts/convert.mjs",
-    "prebuild": "node scripts/convert.mjs",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host",
-    "deploy": "npm run build && wrangler deploy"
+    "dev:worker": "mkdir -p dist && wrangler dev",
+    "sync-audio": "node scripts/sync-audio.mjs",
+    "types": "wrangler types",
+    "typecheck": "wrangler types && tsc --noEmit && tsc --noEmit -p worker",
+    "build": "npm run typecheck && vite build",
+    "preview": "npm run build && wrangler dev",
+    "deploy": "node scripts/sync-audio.mjs && npm run build && wrangler deploy"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

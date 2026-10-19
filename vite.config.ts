@@ -1,7 +1,16 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// `npm run dev:worker` serves audio (R2) and realtime (Durable Object) on 8787.
+const WORKER = 'http://127.0.0.1:8787'
+
 export default defineConfig({
+  server: {
+    proxy: {
+      '/audio': WORKER,
+      '/ws': { target: WORKER, ws: true },
+    },
+  },
   plugins: [
     VitePWA({
       strategies: 'injectManifest',

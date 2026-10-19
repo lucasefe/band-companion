@@ -1,9 +1,20 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "band-companion",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-19",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application"
+  },
+  "r2_buckets": [
+    {
+      "binding": "AUDIO",
+      "bucket_name": "band-companion-audio"
+    }
+  ],
+  "observability": {
+    "enabled": true
   }
 }
