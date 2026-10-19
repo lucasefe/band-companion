@@ -21,7 +21,14 @@ const AUDIO_EXT = new Set(['.wav'])
 
 const target = process.argv.includes('--local') ? 'local' : 'remote'
 
-const previous = existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, 'utf8')) : {}
+// Keys are NFC: macOS reports NFD folder names while git (core.precomposeunicode)
+// checks them out as NFC, and the page matches lyrics by the same key.
+const previous = Object.fromEntries(
+  Object.entries(existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, 'utf8')) : {}).map(([k, v]) => [
+    k.normalize('NFC'),
+    v,
+  ]),
+)
 const manifest = {}
 
 const sources = readdirSync(ROOT, { recursive: true, withFileTypes: true })
@@ -39,7 +46,7 @@ let skipped = 0
 let failed = 0
 
 for (const source of sources) {
-  const folder = relative(ROOT, dirname(source))
+  const folder = relative(ROOT, dirname(source)).normalize('NFC')
   if (folder in manifest) {
     console.error(`  more than one audio file in ${folder}; using ${basename(manifest[folder].source)}`)
     continue

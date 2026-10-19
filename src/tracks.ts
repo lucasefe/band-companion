@@ -29,13 +29,24 @@ const DEFAULT_SET = 'Songs'
 // Each track is a folder: tracks/<set>/<NN - Title>/ holding one audio file
 // (uploaded to R2 by scripts/sync-audio.mjs, listed in tracks/audio.json)
 // and optionally one .lrc or .txt with the lyrics.
-const audio = audioManifest as Record<string, AudioEntry>
+//
+// Folder names are normalized to NFC everywhere: macOS reports NFD, git checks
+// out NFC, and the folder path doubles as the track id shared with followers.
+const audio = Object.fromEntries(
+  Object.entries(audioManifest as Record<string, AudioEntry>).map(([folder, entry]) => [folder.normalize('NFC'), entry]),
+)
 
 const lyricFiles = import.meta.glob('/tracks/**/*.{lrc,txt}', {
   eager: true,
   query: '?raw',
   import: 'default',
 }) as Record<string, string>
+
+function folderOf(path: string): string {
+  const parts = path.replace(/^\/tracks\//, '').split('/')
+  parts.pop()
+  return parts.join('/').normalize('NFC')
+}
 
 // "01 - Sing Sing Sing" -> { order: 1, name: "Sing Sing Sing" }
 function parseName(raw: string): { order: number; name: string } {
@@ -52,10 +63,8 @@ function compare(a: { order: number; name: string }, b: { order: number; name: s
 function loadLyrics(): Map<string, Lyrics> {
   const result = new Map<string, Lyrics>()
   for (const [path, text] of Object.entries(lyricFiles)) {
-    const parts = path.replace(/^\/tracks\//, '').split('/')
-    const file = parts.pop()!
-    const folder = parts.join('/')
-    const kind = file.toLowerCase().endsWith('.lrc') ? 'lrc' : 'txt'
+    const folder = folderOf(path)
+    const kind = path.toLowerCase().endsWith('.lrc') ? 'lrc' : 'txt'
     // An .lrc wins over a .txt in the same folder.
     if (result.has(folder) && kind === 'txt') continue
     result.set(folder, parseLyrics(text, kind))
