@@ -19,7 +19,7 @@ tracks/
 
 - A leading number controls the order and is stripped from the name shown.
 - Folders become set tabs. Files placed directly in `tracks/` go into a set called “Songs”. With a single set the tabs are hidden.
-- Supported: `.mp3`, `.m4a`, `.aac`, `.wav`, `.ogg`. Use MP3 or AAC. Cloudflare Pages rejects files over 25 MB, which rules out WAV for anything longer than a couple of minutes.
+- Supported: `.mp3`, `.m4a`, `.aac`, `.wav`, `.ogg`. Use MP3 or AAC. Cloudflare rejects files over 25 MB, which rules out WAV for anything longer than a couple of minutes.
 - The three files in `tracks/` now are test tones. Delete them when you add real tracks.
 
 Commit, push, and the site redeploys.
@@ -35,13 +35,19 @@ npm run preview    # serve dist/ with the service worker active
 
 The service worker (offline support, update prompt) is only active in `build` / `preview`.
 
-## Deploying to Cloudflare Pages
+## Deploying to Cloudflare
 
-1. Push the repo to GitHub.
-2. In Cloudflare, create a Pages project connected to the repo.
-3. Build command: `npm run build`. Build output directory: `dist`. Node version is read from `.node-version`.
+The app deploys as a Cloudflare Worker serving static assets; `wrangler.jsonc` points it at `dist/`.
 
-Every push to the default branch deploys. Cache headers for hashed assets and the service worker live in `public/_headers`.
+From your machine (first run opens a browser to log in):
+
+```
+npm run deploy
+```
+
+Or connect the GitHub repo in the Cloudflare dashboard (Workers & Pages → Create → import repository) with build command `npm run build` and deploy command `npx wrangler deploy`. Node version is read from `.node-version`. Every push to the default branch then deploys.
+
+Cache headers for hashed assets and the service worker live in `public/_headers`. Cloudflare limits each asset to 25 MB, so keep tracks under that.
 
 ## Setting up the device for a gig
 

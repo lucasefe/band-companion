@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
@@ -19,6 +20,7 @@
     "workbox-precaching": "^7.4.1",
     "workbox-range-requests": "^7.4.1",
     "workbox-routing": "^7.4.1",
-    "workbox-window": "^7.4.1"
+    "workbox-window": "^7.4.1",
+    "wrangler": "^4.151.2"
   }
 }
