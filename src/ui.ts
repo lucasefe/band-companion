@@ -1,3 +1,4 @@
+import { LyricsView } from './lyrics-view'
 import { formatBytes, type OfflineProgress } from './offline'
 import type { PlayerState } from './player'
 import type { Track, TrackSet } from './tracks'
@@ -19,7 +20,11 @@ export interface UIHandlers {
   onSelectSet: (setId: string) => void
   onDownload: () => void
   onReload: () => void
+  // Playback position in seconds, read every frame while playing.
+  getTime: () => number
 }
+
+export type View = 'songs' | 'lyrics'
 
 type Attrs = Record<string, string | boolean | undefined>
 
@@ -52,8 +57,11 @@ export class UI {
   private readonly songButtons = new Map<string, HTMLButtonElement>()
   private readonly setButtons = new Map<string, HTMLButtonElement>()
 
+  private readonly root: HTMLElement
   private readonly setsNav: HTMLElement
   private readonly songList: HTMLOListElement
+  private readonly songsButton: HTMLButtonElement
+  private readonly lyrics: LyricsView
   private readonly offlineChip: HTMLButtonElement
   private readonly wakeChip: HTMLSpanElement
   private readonly nowPlaying: HTMLElement
@@ -72,6 +80,7 @@ export class UI {
   private lastPlaying = false
 
   constructor(root: HTMLElement, sets: TrackSet[], handlers: UIHandlers) {
+    this.root = root
     this.sets = sets
     this.handlers = handlers
 
@@ -79,8 +88,12 @@ export class UI {
     this.offlineChip.addEventListener('click', () => this.handlers.onDownload())
     this.wakeChip = el('span', { class: 'chip chip-wake', role: 'status' })
 
+    this.songsButton = el('button', { class: 'pill songs-back', type: 'button', text: '\u2039 Songs' })
+    this.songsButton.addEventListener('click', () => this.showView('songs'))
+
     this.setsNav = el('nav', { class: 'sets', 'aria-label': 'Sets' })
     this.songList = el('ol', { class: 'song-list' })
+    this.lyrics = new LyricsView()
 
     this.nowTitle = el('div', { class: 'now-title' })
     this.nowSet = el('div', { class: 'now-set' })
@@ -112,13 +125,16 @@ export class UI {
     root.replaceChildren(
       el('header', { class: 'topbar' }, [
         el('h1', { class: 'brand', text: 'Band Companion' }),
+        this.songsButton,
         el('div', { class: 'chips' }, [this.offlineChip, this.wakeChip]),
       ]),
       this.setsNav,
       el('main', { class: 'songs' }, [this.songList]),
+      this.lyrics.element,
       this.nowPlaying,
       this.toast,
     )
+    this.showView('songs')
 
     this.renderSets()
     const first = sets[0]
@@ -136,10 +152,26 @@ export class UI {
     this.renderSongs()
   }
 
+  // On phones the two views alternate; wider screens show both (see styles.css).
+  showView(view: View): void {
+    this.root.classList.toggle('view-songs', view === 'songs')
+    this.root.classList.toggle('view-lyrics', view === 'lyrics')
+  }
+
   updatePlayer(state: PlayerState): void {
     const selected = state.track !== null && state.status !== 'idle'
     const playing = state.status === 'playing' || state.status === 'loading'
     const trackId = selected ? state.track!.id : null
+
+    if (this.lastTrackId !== trackId) {
+      const track = selected ? state.track : null
+      this.lyrics.setLyrics(track?.lyrics ?? null, track ? undefined : 'Tap a song')
+    }
+    if (playing) this.lyrics.start(this.handlers.getTime)
+    else {
+      this.lyrics.stop()
+      this.lyrics.update(state.currentTime)
+    }
 
     if (this.lastTrackId !== trackId || this.lastPlaying !== playing) {
       for (const [id, button] of this.songButtons) {
@@ -272,7 +304,10 @@ export class UI {
         el('span', { class: 'song-title', text: track.title }),
         el('span', { class: 'song-state' }),
       ])
-      button.addEventListener('click', () => this.handlers.onSelect(track))
+      button.addEventListener('click', () => {
+        this.handlers.onSelect(track)
+        if (track.lyrics) this.showView('lyrics')
+      })
       this.songButtons.set(track.id, button)
       this.songList.append(el('li', {}, [button]))
     })

@@ -40,6 +40,9 @@ const ui = new UI(root, sets, {
   onReload() {
     void updateSW?.(true)
   },
+  getTime() {
+    return audioEl.currentTime
+  },
 })
 
 player.subscribe((state) => ui.updatePlayer(state))
