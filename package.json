@@ -17,6 +17,7 @@
     "deploy": "node scripts/sync-audio.mjs && npm run build && wrangler deploy"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "typescript": "^5.9.3",
     "vite": "^8.3.4",
     "vite-plugin-pwa": "^2.0.0",
