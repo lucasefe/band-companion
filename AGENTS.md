@@ -1,39 +1,54 @@
 # AGENTS.md
 
-Backing-track player for a live band, used on an iPhone / iPad mini plugged into a mixing console. Static PWA: Vite 8 + vanilla TypeScript, no framework, no tests, no lint config. `README.md` is accurate; read it for the user-facing workflow.
+Backing-track player with live lyrics for a band. One device (leader) plays the audio into the console; other phones follow the lyrics in real time. Vite 8 + vanilla TypeScript page, Cloudflare Worker + Durable Object + R2 backend. No framework, no unit tests, no lint config. `README.md` is accurate; read it for the user-facing workflow.
 
 ## Commands
 
-- `npm run dev` — Vite dev server. Service worker is NOT active here; offline/update behaviour only exists in `preview`.
-- `npm run build` — runs `prebuild` (`scripts/convert.mjs`), then `tsc --noEmit`, then `vite build`. This is the only typecheck; run it after any TS change.
-- `npm run preview` — serves `dist/` with the service worker. Use this to test caching, range requests, offline.
-- `npm run convert` — ffmpeg WAV/AIFF/FLAC → 320 kbps MP3 next to the source, skipped when up to date. No-op (exit 0) when there are no lossless files, so Cloudflare builds (no ffmpeg) are fine.
-- `npm run deploy` — build + `wrangler deploy`. This is Cloudflare **Workers static assets** (`wrangler.jsonc`, `assets.directory: ./dist`), not Pages. Node 22 is pinned by `.node-version`; Vite 8 needs ≥ 22.12.
+- `npm run dev` — Vite dev server; proxies `/audio` and `/ws` to `npm run dev:worker` (wrangler on 8787). Service worker is NOT active here.
+- `npm run dev:worker` — `wrangler dev` with local R2 and a local Durable Object. Fill local R2 with `npm run sync-audio -- --local` first.
+- `npm run typecheck` — `wrangler types` (generates the git-ignored `worker-configuration.d.ts`), then `tsc` for the page (`tsconfig.json`: `src`, `shared`) and the worker (`worker/tsconfig.json`). Run after any TS change.
+- `npm run build` — typecheck + `vite build`. `npm run preview` builds and serves `dist/` through the worker with the SW active; use it for caching, range requests, offline.
+- `npm run sync-audio` — hash WAVs, upload missing ones to R2, rewrite `tracks/audio.json`. `--local` targets the wrangler dev bucket. Exits without touching the manifest when no WAVs are present (CI).
+- `npm run deploy` — sync audio + build + `wrangler deploy`. Needs `wrangler login` and the bucket `band-companion-audio` to exist.
+- `node scripts/browser-check.mjs [url]` — headless Chrome run-through (leader, lyrics, followers, takeover, offline, tablet) against a running worker. Run it after UI or sync changes; it is the regression suite.
 
 ## Tracks
 
-- `src/tracks.ts` discovers files at build time with `import.meta.glob('/tracks/**/*.{mp3,m4a}')`. Subfolder = set, `NN - Title` prefix = order (stripped from display). One set hides the set bar.
-- Only mp3/m4a are listed on purpose: lossless sources sit next to their MP3 and are git-ignored (`tracks/**/*.wav|aif|aiff|flac`). Commit the MP3s.
-- Cloudflare rejects assets over 25 MB. That is why WAV is converted rather than deployed.
-- Built track URLs are hashed (`/assets/<name>-<hash>.mp3`), which is what makes cache invalidation work. Do not move tracks to `public/`.
+- One folder per song: `tracks/<set>/<NN - Title>/` with one `.wav` (git-ignored) and optionally one `.lrc`/`.txt` (committed). Track id = folder path, used in the realtime protocol; renaming a folder changes the id.
+- `src/tracks.ts` reads `tracks/audio.json` for audio (`/audio/<hash>.wav`) and globs lyrics with `import.meta.glob(..., { query: '?raw' })`. A song needs an audio entry to be listed; lyrics without audio only warn.
+- Audio never goes through the Vite build: Cloudflare rejects assets over 25 MB. Do not add audio globs or move audio into `public/`.
+- Folder names on macOS are NFD; compare titles with `.normalize('NFC')` in tests.
+
+## Worker
+
+- `worker/index.ts`: `/audio/:key` → R2 with range passthrough (`object.range` properties are checked by type, the local runtime leaves unused ones `undefined`), `/ws` → `Room` DO, else `env.ASSETS.fetch` (SPA fallback).
+- `worker/room.ts`: single room `main`, WebSocket Hibernation API, tags `leader`/`follower`, auto-pong for `ping`. Last state persisted in DO storage. A new authenticated leader closes previous leaders with `4002`; a wrong key is accepted then closed with `4001` so the client can tell it apart from a network failure.
+- `LEADER_KEY` default is in `wrangler.jsonc` `vars`; `wrangler secret put LEADER_KEY` overrides it. `shared/protocol.ts` is imported by both page and worker.
+
+## Roles / realtime (`src/sync.ts`, `src/role.ts`, `src/main.ts`)
+
+- Role is local: a stored key means leader. The leader works fully offline; the socket only broadcasts. Only close codes `4001`/`4002` clear the key and demote; connection loss just shows "Leader · offline".
+- Demotion must clear the key, otherwise two devices with the key would take turns demoting each other on reconnect.
+- `Broadcaster.sync()` runs on every player state change but only sends on track/playing changes or seeks (> 1 s from expected); a 2 s heartbeat covers drift. `Follower.now()` extrapolates on the local clock while `playing`.
+- `main.ts` mounts `UI` (leader) or `FollowUI` (follower) into `#app` and swaps them at runtime; `Player` and the `<audio>` element are created once.
 
 ## Offline / service worker
 
-- `vite-plugin-pwa` in `injectManifest` mode; the SW source is `src/sw.ts`. Tracks are excluded from `globPatterns` deliberately — precaching 100s of MB at install fails the whole install.
-- The page writes tracks into Cache Storage (`src/offline.ts`, "Download N tracks" chip); the SW only reads that cache. The cache name `tracks-v1` is duplicated in both files and must stay in sync.
-- The SW slices cached responses with `workbox-range-requests`. Safari requests audio in byte ranges; without this, cached tracks do not play on iOS.
-- `registerType: 'prompt'`: updates show a "Reload" toast instead of auto-reloading. Keep it that way; an auto-reload mid-song at a gig is the failure mode being avoided.
+- `vite-plugin-pwa` in `injectManifest` mode; the SW source is `src/sw.ts`. Audio is excluded from `globPatterns` deliberately.
+- The page writes audio into Cache Storage (`src/offline.ts`); the SW only reads it and matches on `^/audio/`. Cache name `tracks-v1` is duplicated in both files and must stay in sync.
+- `workbox-range-requests` slices cached responses; Safari requests audio in byte ranges.
+- `registerType: 'prompt'`: updates show a "Reload" toast instead of auto-reloading. Keep it that way.
 
 ## Player / UI constraints
 
-- Tapping a song only loads it (`Player.select`); Play / Pause / Restart act on the loaded track. Restart rewinds and preserves playing/paused state; a finished track rewinds and waits.
-- `audio.play()` must be called synchronously inside the tap handler (iOS gesture rule). Do not put `await` before it.
-- Screen Wake Lock is requested on the first tap and re-acquired on `visibilitychange`. There is no hidden-video fallback by design; the chip reports "Can’t keep awake" instead.
-- Components use the `hidden` attribute and `[hidden] { display: none !important }` in `styles.css`, because they also set `display: grid/flex`. Keep that rule.
-- `#app` grid rows are pinned with `grid-row` on each child because the set bar can be `display: none`; without pinning the footer takes the `1fr` row and stretches.
-- Mobile first: safe-area insets, `100dvh`, no hover styles, ≥ 48 px targets. The ≥ 700 px media query adds two columns and moves the transport beside the title; that's the whole "tablet" layout.
-- UI copy uses real typographic characters (’ – — … ×) via `\u` escapes in TS and entities in HTML.
+- Tapping a song loads it (`Player.select`) and opens the lyrics view; Play / Pause / Restart act on the loaded track. Restart preserves playing/paused state.
+- `audio.play()` must be called synchronously inside the tap handler (iOS). No `await` before it.
+- Screen Wake Lock is requested on a tap and re-acquired on `visibilitychange`. Followers get it from any `pointerdown`.
+- `[hidden] { display: none !important }` is relied on; views are switched with `#app.view-songs` / `#app.view-lyrics` classes instead of `hidden` because the ≥ 700 px layout shows both. `#app.follow` is the follower layout.
+- `#app` grid rows are pinned with `grid-row` on each child because the set bar can be `display: none`.
+- `LyricsView` uses `offsetTop` relative to `.lyrics`, which must stay `position: relative`.
+- Mobile first: safe-area insets, `100dvh`, no hover styles, ≥ 48 px targets. UI copy uses real typographic characters (’ – — … ×) via `\u` escapes in TS.
 
 ## Verifying layouts without a device
 
-Plain `chrome --headless --screenshot --window-size=402,…` does not work: headless Chrome enforces a ~500 px minimum window, so phone layouts render clipped. Use the DevTools protocol (`--remote-debugging-port` + `Emulation.setDeviceMetricsOverride` with `mobile: true`) to emulate 402×874 (iPhone) and 1024×744 (iPad mini), then drive `.song`, `.transport-play/-pause/-restart`, `.chip-offline` via `Runtime.evaluate`. `Network.emulateNetworkConditions({ offline: true })` after a download is the offline test.
+Plain `chrome --headless --screenshot` cannot do phone widths. `scripts/cdp.mjs` wraps the DevTools protocol (`Emulation.setDeviceMetricsOverride` with `mobile: true`, one browser context per simulated device so roles stay independent, `Network.emulateNetworkConditions` for offline). `scripts/browser-check.mjs` is the example to extend.

@@ -14,6 +14,25 @@
       "bucket_name": "band-companion-audio"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM",
+        "class_name": "Room"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Room"]
+    }
+  ],
+  // Default key for becoming the leader. Override without committing:
+  //   npx wrangler secret put LEADER_KEY
+  "vars": {
+    "LEADER_KEY": "goodkarma"
+  },
   "observability": {
     "enabled": true
   }

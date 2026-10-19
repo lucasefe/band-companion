@@ -81,6 +81,20 @@ body {
   display: none;
 }
 
+/* Follower: top bar, song title, lyrics. */
+#app.follow {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.follow-now {
+  grid-row: 2;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px var(--pad-x) 10px;
+}
+
 [hidden] {
   display: none !important;
 }
@@ -388,6 +402,10 @@ button.chip:not(:disabled):active {
   letter-spacing: 0.2em;
 }
 
+#app.follow .lyric {
+  font-size: 28px;
+}
+
 /* Timed lyrics: everything but the current line steps back. */
 .lyrics.is-timed .lyric {
   color: var(--muted);
@@ -528,6 +546,71 @@ button.chip:not(:disabled):active {
   font-weight: 600;
 }
 
+/* Short messages ("Wrong key") sit at the bottom so they never cover the update toast. */
+.toast-notice {
+  top: auto;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  max-width: calc(100% - 2 * var(--pad-x));
+  padding: 10px 16px;
+  background: var(--surface-raised);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Leader key dialog */
+
+.lead-dialog {
+  width: min(100% - 32px, 400px);
+  padding: 20px var(--pad-x);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.lead-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+
+.lead-form {
+  display: grid;
+  gap: 12px;
+}
+
+.lead-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.lead-hint {
+  margin: 0;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.field {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 17px;
+}
+
+.field:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-color: transparent;
+}
+
+.lead-actions {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 4px;
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -584,6 +667,20 @@ button.chip:not(:disabled):active {
 
   .lyric {
     font-size: 28px;
+  }
+
+  /* Follower keeps a single column with the lyrics across the full width. */
+  #app.follow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #app.follow .lyrics {
+    grid-column: 1;
+    padding-top: 8px;
+  }
+
+  #app.follow .lyric {
+    font-size: 36px;
   }
 
   .now-playing {

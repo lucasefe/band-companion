@@ -1,5 +1,8 @@
-// Cloudflare Worker: streams audio from R2 and falls through to static assets.
+// Cloudflare Worker: streams audio from R2, routes /ws to the Room Durable
+// Object and falls through to static assets.
 // Audio keys are content hashes (see scripts/sync-audio.mjs), so responses are immutable.
+
+export { Room } from './room'
 
 const AUDIO_PREFIX = '/audio/'
 const KEY_PATTERN = /^[a-f0-9]{16}\.wav$/
@@ -9,6 +12,11 @@ export default {
     const url = new URL(request.url)
 
     if (url.pathname.startsWith(AUDIO_PREFIX)) return serveAudio(request, env, url.pathname.slice(AUDIO_PREFIX.length))
+
+    if (url.pathname === '/ws') {
+      if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected WebSocket', { status: 426 })
+      return env.ROOM.get(env.ROOM.idFromName('main')).fetch(request)
+    }
 
     return env.ASSETS.fetch(request)
   },

@@ -1,6 +1,8 @@
+import { el, formatTime } from './dom'
 import { LyricsView } from './lyrics-view'
 import { formatBytes, type OfflineProgress } from './offline'
 import type { PlayerState } from './player'
+import type { LeaderLink } from './sync'
 import type { Track, TrackSet } from './tracks'
 import type { WakeLockStatus } from './wakelock'
 
@@ -20,36 +22,12 @@ export interface UIHandlers {
   onSelectSet: (setId: string) => void
   onDownload: () => void
   onReload: () => void
+  onStepDown: () => void
   // Playback position in seconds, read every frame while playing.
   getTime: () => number
 }
 
 export type View = 'songs' | 'lyrics'
-
-type Attrs = Record<string, string | boolean | undefined>
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  attrs: Attrs = {},
-  children: (Node | string)[] = [],
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag)
-  for (const [key, value] of Object.entries(attrs)) {
-    if (value === undefined || value === false) continue
-    if (key === 'class') node.className = String(value)
-    else if (key === 'text') node.textContent = String(value)
-    else node.setAttribute(key, value === true ? '' : String(value))
-  }
-  node.append(...children)
-  return node
-}
-
-function formatTime(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
 
 export class UI {
   private readonly handlers: UIHandlers
@@ -64,6 +42,8 @@ export class UI {
   private readonly lyrics: LyricsView
   private readonly offlineChip: HTMLButtonElement
   private readonly wakeChip: HTMLSpanElement
+  private readonly liveChip: HTMLButtonElement
+  private readonly notice: HTMLElement
   private readonly nowPlaying: HTMLElement
   private readonly nowTitle: HTMLElement
   private readonly nowSet: HTMLElement
@@ -87,6 +67,13 @@ export class UI {
     this.offlineChip = el('button', { class: 'chip chip-offline', type: 'button', hidden: true })
     this.offlineChip.addEventListener('click', () => this.handlers.onDownload())
     this.wakeChip = el('span', { class: 'chip chip-wake', role: 'status' })
+    this.liveChip = el('button', { class: 'chip chip-live', type: 'button', text: 'Leader' })
+    this.liveChip.addEventListener('click', () => {
+      if (confirm('Stop leading? Followers will keep the last position until someone else leads.')) {
+        this.handlers.onStepDown()
+      }
+    })
+    this.notice = el('div', { class: 'toast toast-notice', role: 'status', hidden: true })
 
     this.songsButton = el('button', { class: 'pill songs-back', type: 'button', text: '\u2039 Songs' })
     this.songsButton.addEventListener('click', () => this.showView('songs'))
@@ -126,14 +113,16 @@ export class UI {
       el('header', { class: 'topbar' }, [
         el('h1', { class: 'brand', text: 'Band Companion' }),
         this.songsButton,
-        el('div', { class: 'chips' }, [this.offlineChip, this.wakeChip]),
+        el('div', { class: 'chips' }, [this.offlineChip, this.wakeChip, this.liveChip]),
       ]),
       this.setsNav,
       el('main', { class: 'songs' }, [this.songList]),
       this.lyrics.element,
       this.nowPlaying,
       this.toast,
+      this.notice,
     )
+    root.classList.remove('follow')
     this.showView('songs')
 
     this.renderSets()
@@ -272,12 +261,41 @@ export class UI {
     }
   }
 
+  updateLink(link: LeaderLink): void {
+    const chip = this.liveChip
+    chip.classList.remove('is-ok', 'is-warn', 'is-busy')
+    switch (link.status) {
+      case 'live':
+        chip.textContent = `Leader \u00b7 ${link.followers}`
+        chip.classList.add('is-ok')
+        break
+      case 'connecting':
+        chip.textContent = 'Leader \u00b7 connecting\u2026'
+        chip.classList.add('is-busy')
+        break
+      case 'offline':
+        chip.textContent = 'Leader \u00b7 offline'
+        chip.classList.add('is-warn')
+        break
+    }
+  }
+
+  showNotice(text: string): void {
+    this.notice.textContent = text
+    this.notice.hidden = false
+    window.setTimeout(() => (this.notice.hidden = true), 4000)
+  }
+
   showUpdateAvailable(): void {
     this.toast.hidden = false
   }
 
   hideUpdateAvailable(): void {
     this.toast.hidden = true
+  }
+
+  destroy(): void {
+    this.lyrics.stop()
   }
 
   private renderSets(): void {
