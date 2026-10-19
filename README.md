@@ -1,8 +1,19 @@
 # Band Companion
 
-A backing‑track player for live sets. Open it on a phone or iPad plugged into the console, tap a song to load it, hit Play, play along. One track at a time: Pause keeps your place, Restart goes back to the top (and stays paused if you were paused), and loading another song unloads the current one.
+A backing‑track player for live sets. Open it on a phone or iPad plugged into the console, tap a song to load it, hit Play, play along.
 
-It is a static web app (Vite + TypeScript) that runs as a Home Screen web app on iOS. It keeps the screen awake while a track is playing and can store every track on the device so it works with no internet at the venue.
+It is a static web app (Vite + TypeScript) that runs as a Home Screen web app on iOS. It keeps the screen awake, and it can store every track on the device so it works with no internet at the venue.
+
+## Using it
+
+- **Tap a song** to load it. Nothing plays yet; the song is highlighted and the transport appears at the bottom.
+- **Play** starts the track, or resumes from where you paused.
+- **Pause** stops and keeps the position.
+- **Restart** goes back to the top. If it was playing it keeps playing from the top; if paused it waits for Play.
+- Loading another song unloads the current one. When a track ends it rewinds and waits, so Play runs it again.
+- Only one track plays at a time, through whatever audio output the device is using.
+
+The two chips at the top show status: **Awake** (screen won't lock) and **Offline · xx MB** (all tracks stored on the device) or **Download N tracks** (tap to store them).
 
 ## Adding songs
 
@@ -35,14 +46,18 @@ Commit, push, and the site redeploys.
 
 ## Running locally
 
+Requires Node 22.12 or newer. `ffmpeg` is only needed to convert lossless sources.
+
 ```
 npm install
 npm run dev        # http://localhost:5173, also reachable from your phone on the same Wi‑Fi
-npm run build      # production build in dist/
+npm run convert    # lossless sources in tracks/ → MP3 (also runs before build)
+npm run build      # typecheck + production build in dist/
 npm run preview    # serve dist/ with the service worker active
+npm run deploy     # build + publish to Cloudflare
 ```
 
-The service worker (offline support, update prompt) is only active in `build` / `preview`.
+The service worker (offline support, update prompt) is only active in `build` / `preview`, not in `dev`.
 
 ## Deploying to Cloudflare
 
@@ -61,7 +76,7 @@ Cache headers for hashed assets and the service worker live in `public/_headers`
 ## Setting up the device for a gig
 
 1. Open the site in Safari, then Share → **Add to Home Screen**. Launch it from the Home Screen icon from now on. This gives a full‑screen app with its own persistent storage.
-2. Tap **Download N tracks** at the top while on Wi‑Fi. When it reads **Offline · xx MB**, every track is stored on the device and the app works with no connection.
+2. Tap **Download N tracks** at the top while on Wi‑Fi. When it reads **Offline · xx MB**, every track is stored on the device and the app works with no connection. After new songs are deployed, the chip shows how many are missing; tap it again.
 3. Tap any song once. The status chip switches to **Awake**, which means the screen will not lock while the app is in front. If it says **Can’t keep awake**, set Settings → Display & Brightness → Auto‑Lock → Never for the gig.
 4. Optional: Settings → Accessibility → Guided Access lets you lock the device to this app so a stray swipe cannot leave it.
 5. Plug into the console with a USB‑C (or Lightning) audio adapter or interface. Audio plays regardless of the ring/silent switch.
@@ -70,7 +85,8 @@ When a new version has been deployed, an **Update available** pill appears. Tap 
 
 ## How it works
 
-- `src/tracks.ts` discovers audio files at build time with `import.meta.glob`, so there is no manifest to maintain.
+- `scripts/convert.mjs` turns WAV/AIFF/FLAC in `tracks/` into 320 kbps MP3s with ffmpeg, skipping ones that are already up to date. It runs before every build and is a no‑op when there is nothing to convert.
+- `src/tracks.ts` discovers MP3/M4A files at build time with `import.meta.glob`, so there is no manifest to maintain. Vite gives each file a hashed URL, which is what lets the offline cache notice re‑exported songs.
 - `src/player.ts` wraps a single `<audio>` element: select loads a track without playing, then Play / Pause / Restart act on it. Playback starts synchronously inside the tap handler, which iOS requires. When a track ends it rewinds and waits.
 - `src/wakelock.ts` uses the Screen Wake Lock API and re‑acquires the lock whenever the app returns to the foreground.
 - `src/offline.ts` downloads tracks into the Cache Storage API. `src/sw.ts` (Workbox) precaches the app shell and serves cached tracks, slicing them to satisfy the byte‑range requests Safari makes for audio.
