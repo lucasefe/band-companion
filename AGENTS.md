@@ -17,7 +17,7 @@ Backing-track player with live lyrics for a band. One device (leader) plays the 
 - One folder per song: `tracks/<set>/<NN - Title>/` with one `.wav` (git-ignored) and optionally one `.lrc`/`.txt` (committed). Track id = folder path, used in the realtime protocol; renaming a folder changes the id.
 - `src/tracks.ts` reads `tracks/audio.json` for audio (`/audio/<hash>.wav`) and globs lyrics with `import.meta.glob(..., { query: '?raw' })`. A song needs an audio entry to be listed; lyrics without audio only warn.
 - Audio never goes through the Vite build: Cloudflare rejects assets over 25 MB. Do not add audio globs or move audio into `public/`.
-- Folder names on macOS are NFD; compare titles with `.normalize('NFC')` in tests.
+- Unicode: macOS reports folder names as NFD, git (`core.precomposeunicode`) stores and checks them out as NFC. `sync-audio.mjs` and `tracks.ts` normalize every folder key to NFC; keep it that way or a fresh checkout pairs no lyrics with the audio. Compare titles with `.normalize('NFC')` in tests.
 
 ## Worker
 
