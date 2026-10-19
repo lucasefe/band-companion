@@ -65,12 +65,33 @@ check('follower line matches leader', await follower.waitFor('document.querySele
 check('leader counts follower', await leader.waitFor('document.querySelector(".chip-live").textContent === "Leader · 1"', 5000), await leader.evaluate('document.querySelector(".chip-live").textContent'))
 await shot(follower, 'follower-live')
 
+// --- Listening on the follower -----------------------------------------------
+
+check('monitor idle by default', await follower.evaluate('document.getElementById("monitor").paused && !document.getElementById("monitor").getAttribute("src")'))
+await follower.evaluate('document.querySelector(".chip-listen").click()')
+check('listening starts', await follower.waitFor('!document.getElementById("monitor").paused && document.getElementById("monitor").currentTime > 0', 10000), await follower.evaluate('document.querySelector(".chip-listen").textContent'))
+await sleep(2500)
+const leaderPos = await leader.evaluate('document.getElementById("audio").currentTime')
+const monitorPos = await follower.evaluate('document.getElementById("monitor").currentTime')
+check('monitor in sync with leader', Math.abs(leaderPos - monitorPos) < 1, `leader ${leaderPos.toFixed(2)}s, monitor ${monitorPos.toFixed(2)}s`)
+await shot(follower, 'follower-listening')
+
 await leader.evaluate('document.querySelector(".transport-pause").click()')
 await sleep(500)
 const leaderTime = await leader.evaluate('document.getElementById("audio").currentTime')
+check('monitor pauses with leader', await follower.waitFor('document.getElementById("monitor").paused', 5000))
 await leader.evaluate('document.querySelector(".transport-restart").click()')
 // The file opens with a [00:00.000] gap line, so position 0 lands on it.
 check('follower follows restart', await follower.waitFor('document.querySelector(".lyric.is-current") === document.querySelector(".lyric")', 5000), `leader paused at ${leaderTime.toFixed(1)}s then restarted`)
+check('monitor follows restart', await follower.waitFor('document.getElementById("monitor").paused && document.getElementById("monitor").currentTime < 1', 5000), `monitor at ${await follower.evaluate('document.getElementById("monitor").currentTime')}`)
+
+await leader.evaluate('document.querySelector(".transport-play").click()')
+check('monitor resumes with leader', await follower.waitFor('!document.getElementById("monitor").paused', 5000))
+await follower.evaluate('document.querySelector(".chip-listen").click()')
+check('muted again', await follower.waitFor('document.getElementById("monitor").paused && document.querySelector(".chip-listen").textContent === "Muted"', 5000))
+await sleep(2500)
+check('stays muted on heartbeat', await follower.evaluate('document.getElementById("monitor").paused'))
+await leader.evaluate('document.querySelector(".transport-pause").click()')
 
 // --- Takeover and step down ---------------------------------------------------
 

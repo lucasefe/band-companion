@@ -23,6 +23,8 @@ There is only one leader. If a second device enters the key, the first one drops
 
 Open the address, that’s it. The current song and the highlighted line follow the leader. **Live** means connected; **Leader offline** means the leader lost its connection and the lyrics keep running on the last known position. Tap once so the screen stays awake.
 
+Tap **Muted** to hear the track on this device too. It starts, pauses, and restarts with the leader and stays within a fraction of a second of it; there is no transport, the leader drives. Tap **Listening** to mute again. Nothing is downloaded while muted; listening streams the full WAV (about 10 MB per minute), which is worth knowing on cellular. If the chip says **Tap to listen**, the browser refused to start audio on its own; tapping it again fixes that.
+
 ### Leader key
 
 The default key is `goodkarma`, set in `wrangler.jsonc`. To change it without committing anything:
@@ -128,6 +130,7 @@ When a new version has been deployed, an **Update available** pill appears. Tap 
 - `src/sync.ts` is the client side: `Broadcaster` for the leader, `Follower` for everyone else. Followers run the position on their own clock between updates, which is plenty for lyric lines. Both reconnect with backoff and when the app returns to the foreground.
 - `src/player.ts` wraps a single `<audio>` element. Playback starts synchronously inside the tap handler, which iOS requires.
 - `src/lyrics.ts` parses LRC; `src/lyrics-view.ts` highlights and scrolls the current line every frame.
+- `src/monitor.ts` is the follower’s optional audio: a second `<audio>` element that loads the leader’s track and seeks whenever it drifts more than half a second from the extrapolated position. It only starts inside the tap on the chip, which is what iOS requires.
 - `src/ui.ts` is the leader screen, `src/follow-ui.ts` the follower screen; `src/main.ts` mounts one or the other depending on whether the device holds a key (`src/role.ts`).
 - `src/offline.ts` downloads tracks into the Cache Storage API; `src/sw.ts` (Workbox) precaches the app shell and serves cached audio, slicing it for byte‑range requests.
 - `src/wakelock.ts` uses the Screen Wake Lock API and re‑acquires the lock when the app returns to the foreground.

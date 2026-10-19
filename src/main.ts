@@ -1,6 +1,7 @@
 import { registerSW } from 'virtual:pwa-register'
 import './styles.css'
 import { FollowUI } from './follow-ui'
+import { Monitor } from './monitor'
 import { cachedTrackIds, downloadTracks, offlineSupported, storageUsage } from './offline'
 import { Player } from './player'
 import { leaderKey, setLeaderKey } from './role'
@@ -11,6 +12,7 @@ import { keepAwake, subscribeWakeLock } from './wakelock'
 
 const root = document.getElementById('app')!
 const audioEl = document.getElementById('audio') as HTMLAudioElement
+const monitorEl = document.getElementById('monitor') as HTMLAudioElement
 
 const sets = loadSets()
 const tracks = allTracks(sets)
@@ -96,6 +98,7 @@ function mountLeader(key: string): Mounted {
     },
   )
 
+  player.attachMediaSession()
   const unsubscribePlayer = player.subscribe((state) => {
     ui.updatePlayer(state)
     broadcaster.sync()
@@ -149,6 +152,10 @@ function mountFollower(): Mounted {
       setLeaderKey(key)
       mount()
     },
+    onListen() {
+      keepAwake()
+      monitor.toggle()
+    },
     onReload() {
       void updateSW?.(true)
     },
@@ -156,7 +163,12 @@ function mountFollower(): Mounted {
       keepAwake()
     },
   })
-  const follower = new Follower((view) => ui.update(view, () => follower.now()))
+  const monitor = new Monitor(monitorEl, sets, (status) => ui.updateListen(status))
+  const clock = (): number => follower.now()
+  const follower = new Follower((view) => {
+    ui.update(view, clock)
+    monitor.follow(view, clock)
+  })
   const unsubscribeWake = subscribeWakeLock((status) => ui.updateWake(status))
 
   return {
@@ -164,6 +176,7 @@ function mountFollower(): Mounted {
     showNotice: (text) => ui.showNotice(text),
     destroy() {
       follower.close()
+      monitor.destroy()
       unsubscribeWake()
       ui.destroy()
     },

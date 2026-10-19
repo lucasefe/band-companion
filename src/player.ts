@@ -46,12 +46,17 @@ export class Player {
       this.patch({ status: 'error', error: message })
     })
 
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.setActionHandler('play', () => this.play())
-      navigator.mediaSession.setActionHandler('pause', () => this.pause())
-      navigator.mediaSession.setActionHandler('stop', () => this.pause())
-      navigator.mediaSession.setActionHandler('previoustrack', () => this.restart())
-    }
+  }
+
+  // Lock-screen / headset controls. The follower's monitor claims them in its mode.
+  attachMediaSession(): void {
+    if (!('mediaSession' in navigator)) return
+    navigator.mediaSession.setActionHandler('play', () => this.play())
+    navigator.mediaSession.setActionHandler('pause', () => this.pause())
+    navigator.mediaSession.setActionHandler('stop', () => this.pause())
+    navigator.mediaSession.setActionHandler('previoustrack', () => this.restart())
+    navigator.mediaSession.setActionHandler('nexttrack', null)
+    if (this.state.track) this.updateMediaSession(this.state.track)
   }
 
   getState(): PlayerState {

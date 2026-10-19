@@ -31,6 +31,7 @@ Backing-track player with live lyrics for a band. One device (leader) plays the 
 - Demotion must clear the key, otherwise two devices with the key would take turns demoting each other on reconnect.
 - `Broadcaster.sync()` runs on every player state change but only sends on track/playing changes or seeks (> 1 s from expected); a 2 s heartbeat covers drift. `Follower.now()` extrapolates on the local clock while `playing`.
 - `main.ts` mounts `UI` (leader) or `FollowUI` (follower) into `#app` and swaps them at runtime; `Player` and the `<audio>` element are created once.
+- `src/monitor.ts` (follower audio, "Muted / Listening" chip) uses the second `<audio id="monitor">`, never the leader's element. Off by default and loads nothing until toggled; `toggle()` must run inside the tap so iOS unlocks the element (`unlock()` does play+pause when there is nothing to play yet). It seeks on > 0.5 s drift from `Follower.now()`; the leader's 2 s heartbeat is what triggers corrections. Media-session handlers are claimed by whichever mode mounts (`Player.attachMediaSession()` vs `Monitor`).
 
 ## Offline / service worker
 

@@ -1,11 +1,13 @@
 import { el } from './dom'
 import { LyricsView } from './lyrics-view'
+import type { MonitorStatus } from './monitor'
 import type { FollowerView } from './sync'
 import { findTrack, type TrackSet } from './tracks'
 import type { WakeLockStatus } from './wakelock'
 
 export interface FollowHandlers {
   onLead: (key: string) => void
+  onListen: () => void
   onReload: () => void
   onTap: () => void
 }
@@ -18,6 +20,7 @@ export class FollowUI {
 
   private readonly liveChip: HTMLSpanElement
   private readonly wakeChip: HTMLSpanElement
+  private readonly listenChip: HTMLButtonElement
   private readonly nowTitle: HTMLElement
   private readonly nowSet: HTMLElement
   private readonly dialog: HTMLDialogElement
@@ -34,6 +37,8 @@ export class FollowUI {
 
     this.liveChip = el('span', { class: 'chip chip-live', role: 'status' })
     this.wakeChip = el('span', { class: 'chip chip-wake', role: 'status' })
+    this.listenChip = el('button', { class: 'chip chip-listen', type: 'button', 'aria-pressed': 'false' })
+    this.listenChip.addEventListener('click', () => this.handlers.onListen())
     const leadButton = el('button', { class: 'chip chip-lead', type: 'button', text: 'Lead' })
     leadButton.addEventListener('click', () => this.openDialog())
 
@@ -79,7 +84,7 @@ export class FollowUI {
     root.replaceChildren(
       el('header', { class: 'topbar' }, [
         el('h1', { class: 'brand', text: 'Band Companion' }),
-        el('div', { class: 'chips' }, [this.liveChip, this.wakeChip, leadButton]),
+        el('div', { class: 'chips' }, [this.liveChip, this.wakeChip, this.listenChip, leadButton]),
       ]),
       el('div', { class: 'follow-now' }, [this.nowTitle, this.nowSet]),
       this.lyrics.element,
@@ -136,6 +141,25 @@ export class FollowUI {
       case 'denied':
       case 'unsupported':
         chip.textContent = 'Can\u2019t keep awake'
+        chip.classList.add('is-warn')
+        break
+    }
+  }
+
+  updateListen(status: MonitorStatus): void {
+    const chip = this.listenChip
+    chip.classList.remove('is-ok', 'is-warn')
+    chip.setAttribute('aria-pressed', String(status === 'on'))
+    switch (status) {
+      case 'off':
+        chip.textContent = 'Muted'
+        break
+      case 'on':
+        chip.textContent = 'Listening'
+        chip.classList.add('is-ok')
+        break
+      case 'blocked':
+        chip.textContent = 'Tap to listen'
         chip.classList.add('is-warn')
         break
     }
