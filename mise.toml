@@ -1,0 +1,32 @@
+[tools]
+python = "3.12"          # torch/demucs stack is safest on 3.12
+uv = "latest"
+ffmpeg = "9"             # conda-forge prebuilt binary, no Homebrew needed
+yt-dlp = "latest"        # standalone binary; `mise upgrade yt-dlp` when YouTube breaks it
+
+[env]
+UV_PYTHON_DOWNLOADS = "never"   # uv must use mise's Python, never download its own
+
+[settings]
+python.uv_venv_auto = true      # activate .venv on cd so `drums2midi` / `pytest` are on PATH
+
+[hooks]
+postinstall = "uv sync"         # `mise install` also installs the Python deps into .venv
+
+[tasks.sync]
+description = "Install/update Python deps into .venv"
+run = "uv sync"
+
+[tasks.test]
+description = "Run the fast test suite"
+run = "uv run pytest"
+
+[tasks.test-slow]
+description = "Run everything, including tests that need model weights"
+run = "uv run pytest -m ''"
+
+[tasks.lint]
+run = "uv run ruff check . && uv run ruff format --check ."
+
+[tasks.fmt]
+run = "uv run ruff format . && uv run ruff check --fix ."
