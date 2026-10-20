@@ -30,5 +30,21 @@
         "remote"
       ]
     }
+  },
+  "Cumple de Guille/03 - Fotografia": {
+    "key": "b75a9dd7cd102490.wav",
+    "bytes": 65838636,
+    "source": "Fotografia.wav",
+    "uploaded": [
+      "remote"
+    ],
+    "reference": {
+      "key": "7405743f0b4e9ffe.wav",
+      "bytes": 43892008,
+      "source": "Fotografia.reference.wav",
+      "uploaded": [
+        "remote"
+      ]
+    }
   }
 }
