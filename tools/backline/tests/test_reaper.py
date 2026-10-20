@@ -152,6 +152,9 @@ def test_is_generated_distinguishes_our_files_from_reaper_saves(tmp_path: Path):
     theirs.write_text(SAVED_BY_REAPER)
     assert is_generated(ours)
     assert not is_generated(theirs)
+    legacy = tmp_path / "c.RPP"
+    legacy.write_text('<REAPER_PROJECT 0.1 "7.0/drums2midi" 0\n>\n')
+    assert is_generated(legacy), "pre-rename projects are ours too"
     assert not is_generated(tmp_path / "missing.RPP")
 
 

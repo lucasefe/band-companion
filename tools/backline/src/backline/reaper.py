@@ -8,6 +8,7 @@ from pathlib import Path
 from backline.midi_out import PPQ, Sequence
 
 GENERATOR_TAG = "backline"
+LEGACY_TAGS = ("drums2midi",)  # projects written before the rename are still ours
 HEADER = f'<REAPER_PROJECT 0.1 "7.0/{GENERATOR_TAG}" 0'
 
 # Mix defaults, taken from a project the user saved: the practice render is the MIDI drums
@@ -94,7 +95,8 @@ def is_generated(path: Path) -> bool:
     """True if `path` is one of ours and has not been saved over by Reaper."""
     try:
         with path.open(encoding="utf-8", errors="replace") as f:
-            return GENERATOR_TAG in f.readline()
+            header = f.readline()
+        return any(tag in header for tag in (GENERATOR_TAG, *LEGACY_TAGS))
     except OSError:
         return False
 
