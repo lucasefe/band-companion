@@ -58,14 +58,16 @@
     "bytes": 63131898,
     "source": "Man! I Feel Like A Woman!.wav",
     "uploaded": [
-      "remote"
+      "remote",
+      "local"
     ],
     "reference": {
       "key": "092f1915b0f66d8c.wav",
       "bytes": 42087516,
       "source": "Man! I Feel Like A Woman!.reference.wav",
       "uploaded": [
-        "remote"
+        "remote",
+        "local"
       ]
     }
   }

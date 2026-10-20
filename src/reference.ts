@@ -16,13 +16,20 @@ export interface ReferenceState {
 
 const STORAGE_KEY = 'backline:reference'
 const DEFAULT_VOLUME = 0.3
-// Keeping two elements together without stutter: a seek interrupts the audio and makes the
-// element re-buffer, so it is reserved for large gaps (and the leader's own seeks). Small gaps
-// are closed by running the reference a few percent faster or slower, which is inaudible.
-const SEEK_DRIFT = 0.25 // seconds; beyond this, jump
-const NUDGE_DRIFT = 0.015 // seconds; below this, leave it alone
-const MAX_NUDGE = 0.04 // ±4 % playback rate
-const SEEK_COOLDOWN = 1500 // ms; never jump twice in a row while the first one is still settling
+// Keeping two elements together without stutter. Both corrections are audible if overused:
+// a seek interrupts the audio and makes the element re-buffer; a playbackRate change engages
+// the browser's time-stretcher, which crackles on every change (Firefox and WebKit more than
+// Chrome). So: seeks only for large gaps and the leader's own seeks; a fixed, gentle rate nudge
+// with hysteresis on a smoothed drift reading, which in steady state never engages at all.
+const JUMP_DRIFT = 0.3 // seconds; beyond this, jump
+const JUMP_COOLDOWN = 2000 // ms; let a jump settle before judging again
+// Right after a start or a seek, whichever element re-buffers slower ends up behind by 100–200 ms.
+// One follow-up jump fixes that while the interruption is still fresh; after that, only nudges.
+const CORRECTION_DRIFT = 0.08
+const NUDGE_ON = 0.06 // seconds of smoothed drift to start nudging
+const NUDGE_OFF = 0.01 // ... and to stop
+const NUDGE_RATE = 0.015 // ±1.5 % playback rate, fixed
+const SMOOTHING = 0.35 // EMA factor on the drift reading; two currentTimes jitter by ~10 ms
 
 interface Stored {
   enabled: boolean
@@ -42,9 +49,9 @@ export class Reference {
   private enabled: boolean
   private state: ReferenceState
   private lastJumpAt = 0
-  // How far behind the reference lands after a jump (seek latency), learned so the next jump
-  // aims ahead by that much.
-  private jumpLag = 0
+  private corrected = false // the one follow-up jump after the last deliberate jump was used
+  private drift: number | null = null // smoothed main − reference, seconds (> 0: reference late)
+  private nudging = 0 // -1, 0, +1
 
   constructor(audio: HTMLAudioElement, main: HTMLAudioElement) {
     this.audio = audio
@@ -151,7 +158,8 @@ export class Reference {
 
   private onMainPause = (): void => {
     if (!this.audio.paused) this.audio.pause()
-    this.audio.playbackRate = 1
+    this.stopNudging()
+    this.drift = null
   }
 
   // The leader seeked on purpose: follow immediately, a glitch is expected here.
@@ -162,22 +170,34 @@ export class Reference {
 
   private onMainTime = (): void => {
     if (!this.active() || this.main.paused || this.audio.paused || this.audio.seeking) return
-    const behind = this.main.currentTime - this.audio.currentTime // > 0: reference is late
-    const now = performance.now()
-    if (now - this.lastJumpAt < SEEK_COOLDOWN) {
-      // First reading after a jump: remember how far behind the seek left us.
-      if (behind > 0 && behind < SEEK_DRIFT) this.jumpLag = Math.min(0.5, 0.5 * this.jumpLag + 0.5 * behind)
-      return
-    }
-    if (Math.abs(behind) > SEEK_DRIFT) {
+    const raw = this.main.currentTime - this.audio.currentTime // > 0: reference is late
+    if (performance.now() - this.lastJumpAt < JUMP_COOLDOWN) return // let the jump settle
+
+    this.drift = this.drift === null ? raw : this.drift + SMOOTHING * (raw - this.drift)
+    const drift = this.drift
+
+    if (Math.abs(raw) > JUMP_DRIFT) {
       this.jump()
       return
     }
-    if (Math.abs(behind) > NUDGE_DRIFT) {
-      this.audio.playbackRate = 1 + Math.sign(behind) * Math.min(MAX_NUDGE, Math.abs(behind))
-    } else if (this.audio.playbackRate !== 1) {
-      this.audio.playbackRate = 1
+    if (!this.corrected && Math.abs(drift) > CORRECTION_DRIFT) {
+      this.jump()
+      this.corrected = true
+      return
     }
+    if (this.nudging === 0) {
+      if (Math.abs(drift) > NUDGE_ON) {
+        this.nudging = Math.sign(drift)
+        this.audio.playbackRate = 1 + this.nudging * NUDGE_RATE
+      }
+    } else if (Math.abs(drift) < NUDGE_OFF || Math.sign(drift) !== this.nudging) {
+      this.stopNudging()
+    }
+  }
+
+  private stopNudging(): void {
+    this.nudging = 0
+    if (this.audio.playbackRate !== 1) this.audio.playbackRate = 1
   }
 
   private active(): boolean {
@@ -185,8 +205,10 @@ export class Reference {
   }
 
   private jump(): void {
-    this.audio.playbackRate = 1
-    this.audio.currentTime = this.main.currentTime + (this.main.paused ? 0 : this.jumpLag)
+    this.stopNudging()
+    this.drift = null
+    this.corrected = false
+    this.audio.currentTime = this.main.currentTime
     this.lastJumpAt = performance.now()
   }
 
@@ -216,6 +238,8 @@ export class Reference {
   }
 
   private unload(): void {
+    this.stopNudging()
+    this.drift = null
     this.audio.pause()
     this.audio.removeAttribute('src')
     this.audio.load()
