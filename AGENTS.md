@@ -26,7 +26,7 @@ The venv is activated on `cd`; `backline` is on PATH. `UV_PROJECT` points uv at 
 - `mise run deploy` — sync audio + build + `wrangler deploy`. Needs `wrangler login`.
 - `mise run check:browser` (`node scripts/browser-check.mjs [url]`) — headless Chrome run-through (leader, lyrics, reference, followers, takeover, offline, tablet) against a running preview. Run it after UI or sync changes. It derives its lyric/title expectations from the first song folder in `tracks/`, so it follows the set list; it needs the local R2 filled (`mise run sync-audio -- --local`).
 - `mise run test` / `mise run test:slow` / `mise run lint` / `mise run fmt` — the importer (pytest, ruff).
-- `backline add <file|url> [--set .. --number ..]`, `backline resimplify <job>`, `backline lyrics <job>`, `backline rename <job> --title/--artist` (job dir, project, song folder + files incl. the render, then reruns output), `backline fx-template <RPP>`, `backline doctor`.
+- `backline add <file|url> [--set .. --number ..]`, `backline resimplify <job>` (reuses the job's saved options — pass `--metronome`/`--count-in` explicitly to change an existing job; config defaults only apply to new ones), `backline lyrics <job>`, `backline rename <job> --title/--artist` (job dir, project, song folder + files incl. the render, then reruns output), `backline fx-template <RPP>`, `backline doctor`.
 
 The reference material: `https://www.youtube.com/watch?v=flr8vDQ9Wuc` (Juanes – Fotografía; music
 video 244 s vs 241 s album cut → lyrics offset +0.80 s is expected), job
@@ -95,8 +95,11 @@ src/backline/
   lyrics.py / lrclib.py   identification, LRCLIB lookup + ranking, vocal-stem offset check, LRC I/O
   midi_out.py   CountIn, TempoMap, Layout, build_sequence() → Sequence; write_midi()
   reference.py  original + synthesized count-in clicks on the output timeline, 16-bit
-  metronome.py  detect_gaps() from per-beat drum-stem RMS (snapped to bars); write_metronome()
-                on the real beat times (modes gaps/always/off) → work/metronome.wav, mono
+  metronome.py  write_metronome(): one plain click per quarter note on the regularized grid
+                (modes always/gaps/off) → work/metronome.wav, mono; detect_gaps() for gaps mode
+  tempo.py      also regularize(): quarter note within 60–170 bpm, drop double-time extras in
+                phase, fill clearly skipped beats (≥1.7×), keep slow-downs; never trust downbeats
+                that imply an absurd tempo (they flip with the beats)
   reaper.py     project (metronome hard L, stem muted L, MIDI hard R + FX template, daring muted R,
                 original muted), markers, RENDER_* settings; extract_fx_chain(); is_generated()
 tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop; tests pass an explicit
@@ -117,8 +120,10 @@ Rules:
   stage's params: bump it when the output stage changes what it writes for the same inputs.
 - **One `Sequence`, every renderer.** `build_sequence()` is the single source of truth for ticks;
   `write_midi()`, `reaper.py`, the `.lrc` files, `reference.py` and `metronome.py` all derive from
-  the same `Layout`. Never compute timing in a renderer. The metronome follows `beats.json`'s real
-  beat times (the song drifts), the MIDI a constant tempo — both are in song time + `shift`.
+  the same `Layout`. Never compute timing in a renderer. The metronome follows the real beat
+  times (the song drifts) after `regularize()`; `beats.json` stays the raw detection; the MIDI
+  uses a constant tempo — all in song time + `shift`. "Don't be creative" with the click: one
+  sound, every quarter note, same level; the user asked for exactly that.
 - **The metronome is baked into the render on purpose** (project track hard left, MIDI drums hard
   right): no third element to keep in sync in the player, and L/R can be routed separately. The
   player plays `Title.wav` as-is.
@@ -155,6 +160,6 @@ project; player reference track with live volume/mute; offline includes referenc
 Open (see `docs/PLAN.md`): per-beat tempo map, quantized `essence`/`detailed` styles,
 `--bpm`/`--downbeat-offset`, Whisper fallback for lyrics, `--json` progress, followers hearing
 the reference, a `--render` flag driving Reaper's command-line renderer.
-Player, next: read `backline.json` in `tracks.ts` (glob it like the `.lrc` files) and show
-artist + title in the song list and the now-playing detail, plus a link to the source
-(YouTube) that opens outside the standalone app (`target=_blank`, `rel=noopener`).
+Player: `tracks.ts` globs `backline.json` too; `Track.artist` and `Track.source` feed the list
+(`.song-artist`), the now-playing meta (`describe()` = "Artist · Set", `.now-source` link with
+`target=_blank rel=noopener`) and the media-session metadata.
