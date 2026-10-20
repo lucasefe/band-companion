@@ -261,21 +261,40 @@ Tune `essence` on real songs between M2 and M3 — that is where the product liv
 
 ```python
 import numpy as np, soundfile as sf
-sr=44100; bpm=100; beat=60/bpm; dur=beat*16
-t=np.arange(int(sr*dur))/sr; y=np.zeros_like(t); rng=np.random.default_rng(0)
+
+sr = 44100
+bpm = 100
+beat = 60 / bpm
+dur = beat * 16
+t = np.arange(int(sr * dur)) / sr
+y = np.zeros_like(t)
+rng = np.random.default_rng(0)
+
+
 def add(start, sig):
-    i=int(start*sr); n=min(len(sig), len(y)-i); y[i:i+n]+=sig[:n]
-tt=np.arange(int(0.3*sr))/sr
-kick=np.sin(2*np.pi*(50+100*np.exp(-tt*30))*tt)*np.exp(-tt*12)
-snare=rng.normal(0,1,len(tt))*np.exp(-tt*20)*0.5+np.sin(2*np.pi*180*tt)*np.exp(-tt*25)*0.4
-hat=rng.normal(0,1,int(0.05*sr)); hat=np.diff(hat,prepend=0)*np.exp(-np.arange(len(hat))/sr*80)*0.15
+    i = int(start * sr)
+    n = min(len(sig), len(y) - i)
+    y[i : i + n] += sig[:n]
+
+
+tt = np.arange(int(0.3 * sr)) / sr
+kick = np.sin(2 * np.pi * (50 + 100 * np.exp(-tt * 30)) * tt) * np.exp(-tt * 12)
+snare = (
+    rng.normal(0, 1, len(tt)) * np.exp(-tt * 20) * 0.5
+    + np.sin(2 * np.pi * 180 * tt) * np.exp(-tt * 25) * 0.4
+)
+hat = rng.normal(0, 1, int(0.05 * sr))
+hat = np.diff(hat, prepend=0) * np.exp(-np.arange(len(hat)) / sr * 80) * 0.15
 for b in range(16):
-    s=b*beat
-    if b%4 in (0,2): add(s,kick)
-    if b%4 in (1,3): add(s,snare)
-    add(s,hat); add(s+beat/2,hat)
-bass=0.2*np.sin(2*np.pi*55*t)*(0.5+0.5*np.sign(np.sin(2*np.pi*t/beat)))
-sf.write("loop.wav", np.stack([y+bass]*2,1)*0.6, sr)
+    s = b * beat
+    if b % 4 in (0, 2):
+        add(s, kick)
+    if b % 4 in (1, 3):
+        add(s, snare)
+    add(s, hat)
+    add(s + beat / 2, hat)
+bass = 0.2 * np.sin(2 * np.pi * 55 * t) * (0.5 + 0.5 * np.sign(np.sin(2 * np.pi * t / beat)))
+sf.write("loop.wav", np.stack([y + bass] * 2, 1) * 0.6, sr)
 ```
 
 Expected ADTOF output: 8 kick, 8 snare, ~32 hi-hat. Expected tempo ≈ 100 BPM, first downbeat at 0.
