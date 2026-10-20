@@ -120,7 +120,7 @@ export class Player {
     if (!('mediaSession' in navigator)) return
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title,
-      artist: 'Backline',
+      artist: track.artist ?? 'Backline',
       album: track.setName,
     })
     this.setPlaybackState('paused')

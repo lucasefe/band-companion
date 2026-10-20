@@ -4,6 +4,9 @@ import audioManifest from '../tracks/audio.json'
 export interface Track {
   id: string
   title: string
+  artist: string | null
+  // Where the song was imported from (a YouTube page, usually); shown as an outbound link.
+  source: { url: string; label: string } | null
   url: string
   bytes: number
   // The original song on the same timeline (count-in included); the leader can mix it in.
@@ -45,6 +48,34 @@ const lyricFiles = import.meta.glob('/tracks/**/*.{lrc,txt}', {
   import: 'default',
 }) as Record<string, string>
 
+// Written by `backline add` next to the lyrics: artist, title and where the song came from.
+interface SongRecord {
+  song?: { artist?: string | null; title?: string | null }
+  source?: { kind?: string; url?: string }
+}
+
+const recordFiles = import.meta.glob('/tracks/**/backline.json', {
+  eager: true,
+  import: 'default',
+}) as Record<string, SongRecord>
+
+function loadRecords(): Map<string, SongRecord> {
+  const result = new Map<string, SongRecord>()
+  for (const [path, record] of Object.entries(recordFiles)) result.set(folderOf(path), record)
+  return result
+}
+
+function sourceOf(record: SongRecord | undefined): Track['source'] {
+  const url = record?.source?.kind === 'url' ? record.source.url : undefined
+  if (!url) return null
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    return { url, label: /(^|\.)youtu(\.be|be\.com)$/.test(host) ? 'YouTube' : host }
+  } catch {
+    return null
+  }
+}
+
 function folderOf(path: string): string {
   const parts = path.replace(/^\/tracks\//, '').split('/')
   parts.pop()
@@ -78,6 +109,7 @@ function loadLyrics(): Map<string, Lyrics> {
 export function loadSets(): TrackSet[] {
   const sets = new Map<string, TrackSet>()
   const lyrics = loadLyrics()
+  const records = loadRecords()
 
   for (const [folder, entry] of Object.entries(audio)) {
     const parts = folder.split('/')
@@ -91,9 +123,12 @@ export function loadSets(): TrackSet[] {
       set = { id: setFolder, name: setInfo.name, order: setInfo.order, tracks: [] }
       sets.set(setFolder, set)
     }
+    const record = records.get(folder)
     set.tracks.push({
       id: folder,
       title: trackInfo.name,
+      artist: record?.song?.artist?.trim() || null,
+      source: sourceOf(record),
       url: `/audio/${entry.key}`,
       bytes: entry.bytes,
       reference: entry.reference ? { url: `/audio/${entry.reference.key}`, bytes: entry.reference.bytes } : null,
@@ -129,4 +164,9 @@ export function findTrack(sets: TrackSet[], id: string): Track | null {
     if (track) return track
   }
   return null
+}
+
+// "Artist · Set" under a title; the set only when there is more than one.
+export function describe(track: Track, withSet: boolean): string {
+  return [track.artist, withSet ? track.setName : null].filter(Boolean).join(' \u00b7 ')
 }

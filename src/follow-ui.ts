@@ -2,7 +2,7 @@ import { el } from './dom'
 import { LyricsView } from './lyrics-view'
 import type { MonitorStatus } from './monitor'
 import type { FollowerView } from './sync'
-import { findTrack, type TrackSet } from './tracks'
+import { describe, findTrack, type TrackSet } from './tracks'
 import type { WakeLockStatus } from './wakelock'
 
 export interface FollowHandlers {
@@ -113,7 +113,7 @@ export class FollowUI {
         : state.trackId
           ? 'Unknown song'
           : 'Nothing loaded'
-    this.nowSet.textContent = track && this.sets.length > 1 ? track.setName : ''
+    this.nowSet.textContent = track ? describe(track, this.sets.length > 1) : ''
 
     const trackId = state?.trackId ?? null
     if (trackId !== this.lastTrackId) {

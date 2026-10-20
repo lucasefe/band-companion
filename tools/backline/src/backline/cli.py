@@ -82,7 +82,7 @@ def add(
     ),
     count_in_note: int | None = typer.Option(None, help="MIDI note for the count-in click."),
     metronome: str | None = typer.Option(
-        None, help="Metronome in the render: gaps (where the drums stop), always, off."
+        None, help="Metronome in the render: always (every beat), gaps (where the drums stop), off."
     ),
     keep_other: bool = typer.Option(False, help="Also save work/no_drums.wav."),
     force: bool = typer.Option(False, help="Ignore cached artifacts and rerun every stage."),
@@ -136,7 +136,7 @@ def resimplify(
     count_in: int | None = typer.Option(None),
     count_in_note: int | None = typer.Option(None),
     to: Path | None = typer.Option(None, "--to", help="Song folder for the .lrc and the render."),
-    metronome: str | None = typer.Option(None, help="gaps | always | off"),
+    metronome: str | None = typer.Option(None, help="always | gaps | off"),
 ) -> None:
     """Regenerate notes, MIDI, lyrics files and the Reaper project from cached analysis (fast)."""
     from backline.pipeline import resimplify as resimplify_pipeline

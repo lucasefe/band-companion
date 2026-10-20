@@ -30,6 +30,11 @@ const lines = readFileSync(new URL(`${setDir}/${firstDir}/${lrcFile}`, TRACKS), 
   .filter((m) => m && m[3].trim().length > 3)
   .map((m) => ({ time: Number(m[1]) * 60 + Number(m[2]), text: m[3].trim() }))
 const pick = (i) => lines[Math.min(i, lines.length - 1)]
+const recordFile = new URL(`${setDir}/${firstDir}/backline.json`, TRACKS)
+let firstArtist = null
+try {
+  firstArtist = JSON.parse(readFileSync(recordFile, 'utf8')).song?.artist ?? null
+} catch {}
 const L1 = pick(4) // a line well into the song
 const L2 = pick(9) // a later line to tap
 const L3 = pick(6) // another one for the follower
@@ -60,10 +65,16 @@ await lead(leader, KEY)
 check('leader UI mounted', await leader.waitFor('document.querySelectorAll(".song").length > 0', 5000))
 check('leader chip live', await leader.waitFor('document.querySelector(".chip-live").textContent.startsWith("Leader · ")', 5000), await leader.evaluate('document.querySelector(".chip-live").textContent'))
 await shot(leader, 'phone-list')
-
+if (firstArtist) {
+  check('song list shows the artist', await leader.evaluate(`document.querySelector(".song .song-artist")?.textContent === ${js(firstArtist)}`), await leader.evaluate('document.querySelector(".song .song-artist")?.textContent'))
+}
 await leader.evaluate('document.querySelector(".song").click()')
 await sleep(300)
 check('track loaded', await leader.evaluate('!document.querySelector(".now-playing").hidden'))
+if (firstArtist) {
+  check('now playing shows the artist', await leader.evaluate(`document.querySelector(".now-set").textContent.startsWith(${js(firstArtist)})`), await leader.evaluate('document.querySelector(".now-set").textContent'))
+  check('source link opens outside the app', await leader.evaluate('(() => { const a = document.querySelector(".now-source"); return !a.hidden && a.target === "_blank" && /^https?:/.test(a.href) })()'))
+}
 check('lyrics view shown', await leader.evaluate('document.getElementById("app").classList.contains("view-lyrics")'))
 check('lyrics rendered', (await leader.evaluate('document.querySelectorAll(".lyric").length')) > 10)
 await shot(leader, 'phone-loaded')

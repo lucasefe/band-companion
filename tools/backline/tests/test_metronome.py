@@ -86,7 +86,8 @@ def test_metronome_gaps_mode_clicks_only_in_gaps_and_count_in(tmp_path: Path):
             assert level_at(t) > 0.1, f"beat {b} should click"
         else:
             assert level_at(t) < 0.005, f"beat {b} should be silent"
-    assert level_at(layout.shift + 8 * SPB) > level_at(layout.shift + 9 * SPB), "beat 1 is accented"
+    a, b = level_at(layout.shift + 8 * SPB), level_at(layout.shift + 9 * SPB)
+    assert abs(a - b) < 0.01, "every beat is the same plain click"
 
 
 def test_metronome_always_and_off(tmp_path: Path):
@@ -96,9 +97,9 @@ def test_metronome_always_and_off(tmp_path: Path):
 
     write_metronome(tmp_path / "always.wav", layout, beats, [Gap(4, 8)], mode="always")
     y, _ = sf.read(tmp_path / "always.wav", dtype="float32")
-    steady = _rms(y[int(1 * SPB * SR) : int(1 * SPB * SR) + n])
-    in_gap = _rms(y[int(5 * SPB * SR) : int(5 * SPB * SR) + n])
-    assert steady > 0.05 and in_gap > steady, "gap clicks are louder than steady ones"
+    levels = [_rms(y[int(b * SPB * SR) : int(b * SPB * SR) + n]) for b in range(8)]
+    assert min(levels) > 0.05, "a click on every beat"
+    assert max(levels) - min(levels) < 0.01, "all the same, in and out of the gaps"
 
     write_metronome(tmp_path / "off.wav", layout, beats, [Gap(4, 8)], mode="off")
     y, _ = sf.read(tmp_path / "off.wav", dtype="float32")

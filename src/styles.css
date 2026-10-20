@@ -293,10 +293,25 @@ button.chip:not(:disabled):active {
   text-align: right;
 }
 
+.song-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .song-title {
   font-size: 20px;
   font-weight: 600;
   line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.song-artist {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--muted);
   overflow-wrap: anywhere;
 }
 
@@ -464,10 +479,31 @@ button.chip:not(:disabled):active {
   white-space: nowrap;
 }
 
-.now-set {
+.now-meta {
   flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  max-width: 55%;
+  min-width: 0;
+}
+
+.now-set {
   font-size: 13px;
   color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.now-source {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 6px 0;
+  margin: -6px 0;
 }
 
 /* The bar is 6 px tall; the slider around it gives a 44 px touch target

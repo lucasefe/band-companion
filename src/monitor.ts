@@ -138,7 +138,7 @@ export class Monitor {
     if (!('mediaSession' in navigator)) return
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title,
-      artist: 'Backline \u00b7 following',
+      artist: `${track.artist ?? 'Backline'} \u00b7 following`,
       album: track.setName,
     })
   }

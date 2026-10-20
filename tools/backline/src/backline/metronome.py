@@ -1,8 +1,9 @@
-"""The metronome track: clicks on the song's real beat grid, on the output timeline.
+"""The metronome track: one plain click on every quarter note of the song's real beat grid, on
+the output timeline. Rendered from Reaper hard left, with the MIDI drums hard right, so the two
+can be routed separately.
 
-Where the drums drop out (intro before they enter, breakdowns, stops, outro) the band loses the
-beat; those gaps are found from the drum stem and filled with counted clicks. Rendered from
-Reaper hard left, with the MIDI drums hard right, so the two can be routed separately.
+Mode "gaps" restricts the clicks to the stretches where the drums drop out (found from the drum
+stem); "always" is the default.
 """
 
 from __future__ import annotations
@@ -19,12 +20,8 @@ from backline.tempo import Beats
 
 MODES = ("gaps", "always", "off")
 
-# Click levels: the gaps are where the click matters, so they are louder; beat 1 louder still.
-GAP_LEVEL = 0.6
-STEADY_LEVEL = 0.3  # mode "always", outside the gaps
-ACCENT_GAIN = 1.5
-# Beat 1 is the bright accent; later beats step up slightly in pitch so a bar can be counted by ear.
-BEAT_PITCH = (1500.0, 1000.0, 1060.0, 1120.0, 1180.0, 1240.0, 1300.0, 1360.0)
+# One sound for every beat: the plain (non-accent) count-in click, so it matches the reference.
+CLICK_LEVEL = 0.5
 
 
 @dataclass
@@ -124,14 +121,12 @@ def write_metronome(
             put(layout.count_in_start + k * spb, accent=k % layout.meter == 0, level=None)
 
     if mode != "off":
-        position = _beat_positions(beats)  # 0 = beat one of its bar
         for i, t in enumerate(times):
-            in_gap = any(g.contains(i) for g in gaps)
-            if mode == "gaps" and not in_gap:
+            if count_in and t < layout.first_downbeat - 1e-3:
+                continue  # pickup beats: the count-in already clicks there
+            if mode == "gaps" and not any(g.contains(i) for g in gaps):
                 continue
-            pos = position[i]
-            level = (GAP_LEVEL if in_gap else STEADY_LEVEL) * (ACCENT_GAIN if pos == 0 else 1.0)
-            put(t, accent=pos == 0, level=level, pitch=BEAT_PITCH[min(pos, len(BEAT_PITCH) - 1)])
+            put(t, accent=False, level=CLICK_LEVEL)
 
     np.clip(out, -1.0, 1.0, out=out)
     sf.write(dest_wav, out, sr, subtype="PCM_16")
@@ -172,15 +167,6 @@ def _bar_starts(beats: Beats) -> np.ndarray:
             return idx
     first = 0
     return np.arange(first, len(times), max(1, beats.meter))
-
-
-def _beat_positions(beats: Beats) -> np.ndarray:
-    starts = _bar_starts(beats)
-    positions = np.zeros(len(beats.beats), dtype=int)
-    for i in range(len(positions)):
-        k = int(np.searchsorted(starts, i, side="right")) - 1
-        positions[i] = i - int(starts[k]) if k >= 0 else i % max(1, beats.meter)
-    return positions
 
 
 def _snap_down(bar_starts: np.ndarray, i: int) -> int:

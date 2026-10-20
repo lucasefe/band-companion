@@ -4,7 +4,7 @@ import { formatBytes, type OfflineProgress } from './offline'
 import type { PlayerState } from './player'
 import type { ReferenceState } from './reference'
 import type { LeaderLink } from './sync'
-import type { Track, TrackSet } from './tracks'
+import { describe, type Track, type TrackSet } from './tracks'
 import type { WakeLockStatus } from './wakelock'
 
 export type OfflineView =
@@ -53,6 +53,7 @@ export class UI {
   private readonly nowPlaying: HTMLElement
   private readonly nowTitle: HTMLElement
   private readonly nowSet: HTMLElement
+  private readonly nowSource: HTMLAnchorElement
   private readonly seekBar: HTMLElement
   private readonly progressFill: HTMLElement
   private readonly elapsed: HTMLElement
@@ -97,6 +98,7 @@ export class UI {
 
     this.nowTitle = el('div', { class: 'now-title' })
     this.nowSet = el('div', { class: 'now-set' })
+    this.nowSource = el('a', { class: 'now-source', target: '_blank', rel: 'noopener', hidden: true })
     this.progressFill = el('div', { class: 'progress-fill' })
     this.seekBar = el('div', { class: 'seek', role: 'slider', tabindex: '0', 'aria-label': 'Position', 'aria-valuemin': '0' }, [
       el('div', { class: 'progress' }, [this.progressFill]),
@@ -136,7 +138,10 @@ export class UI {
     ])
 
     this.nowPlaying = el('footer', { class: 'now-playing', hidden: true }, [
-      el('div', { class: 'now-text' }, [this.nowTitle, this.nowSet]),
+      el('div', { class: 'now-text' }, [
+        this.nowTitle,
+        el('div', { class: 'now-meta' }, [this.nowSet, this.nowSource]),
+      ]),
       this.seekBar,
       el('div', { class: 'times' }, [this.elapsed, this.remaining]),
       this.referenceRow,
@@ -236,7 +241,12 @@ export class UI {
     if (!selected || !state.track) return
 
     this.nowTitle.textContent = state.track.title
-    this.nowSet.textContent = this.sets.length > 1 ? state.track.setName : ''
+    this.nowSet.textContent = describe(state.track, this.sets.length > 1)
+    this.nowSource.hidden = !state.track.source
+    if (state.track.source) {
+      this.nowSource.href = state.track.source.url
+      this.nowSource.textContent = `${state.track.source.label} \u2197`
+    }
     this.duration = state.duration
     this.seekBar.setAttribute('aria-valuemax', String(Math.round(state.duration)))
     // While dragging, the bar previews the drag position instead of the player's.
@@ -439,9 +449,11 @@ export class UI {
     if (!set) return
 
     set.tracks.forEach((track, index) => {
+      const text = [el('span', { class: 'song-title', text: track.title })]
+      if (track.artist) text.push(el('span', { class: 'song-artist', text: track.artist }))
       const button = el('button', { class: 'song', type: 'button', 'aria-pressed': 'false' }, [
         el('span', { class: 'song-index', text: String(index + 1) }),
-        el('span', { class: 'song-title', text: track.title }),
+        el('span', { class: 'song-text' }, text),
         el('span', { class: 'song-state' }),
       ])
       button.addEventListener('click', () => {

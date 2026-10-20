@@ -15,10 +15,11 @@ bars = 2
 note = 37   # GM side stick, what the MIDI tracks play during the count-in
 
 [metronome]
-# Clicks rendered hard left in the Reaper project (MIDI drums go hard right):
-#   gaps   – count-in, then only where the drums drop out (intros, breakdowns, stops)
-#   always – every beat, louder in the gaps
+# A plain click on every quarter note, rendered hard left in the Reaper project (MIDI drums go
+# hard right):
+#   always – every beat (default)
+#   gaps   – only where the drums drop out (intros, breakdowns, stops), plus the count-in
 #   off
-mode = "gaps"
+mode = "always"
 min_gap_bars = 1      # shorter silences are left alone
 silence_db = -30      # how far below the song's usual drum level counts as silence

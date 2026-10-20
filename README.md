@@ -27,10 +27,9 @@ tracks/Cumple de Guille/02 - Fotografía/
 ```
 
 The band plays to the drums. The **metronome** lives on the left channel of the same file: the
-count-in, then clicks wherever the drums drop out — intros before they enter, breakdowns, stops —
-found automatically from the drum stem, with beat 1 accented so you can count the bar. Left and
-right can be routed separately (click to in-ears, drums to the PA). The leader can bring the
-original in underneath at any volume, or mute it, without anything going out of sync.
+count-in, then one plain click on every quarter note of the song. Left and right can be routed
+separately (click to in-ears, drums to the PA). The leader can bring the original in underneath
+at any volume, or mute it, without anything going out of sync.
 
 ## Setup
 
@@ -114,7 +113,7 @@ what changed.
 
 | Track | Content | Pan | State |
 |---|---|---|---|
-| `<Title> (metronome)` | clicks: count-in, then the gaps (or every beat) | **hard left** | on |
+| `<Title> (metronome)` | count-in, then a click on every quarter note | **hard left** | on |
 | `<Title> (drums)` | the real drums (Demucs stem) | hard left | muted — unmute to compare |
 | `<Title> (MIDI conservative)` | the drums as MIDI | **hard right** | on, your VSTi loaded |
 | `<Title> (MIDI daring)` | same, more sensitive detection | hard right | muted, your VSTi loaded |
@@ -127,13 +126,14 @@ regeneration goes to `<Title>.new.RPP` beside it.
 
 ### The metronome
 
-Per beat, the drum stem's level is compared with the song's usual drum level; a run of at least
-one bar more than 30 dB below it is a gap, widened to bar lines so the click starts on a 1. The
-clicks follow the song's real beats (not a fixed grid), beat 1 is brighter and louder, and later
-beats step up in pitch so a bar can be counted by ear. `backline.json` lists the gaps it found,
-e.g. `bar 2, 10 bars, 3.9–21.3 s` for a guitar intro. Modes in `backline.toml`: `gaps`
-(default), `always` (every beat, louder in the gaps), `off`; `backline resimplify <job>
---metronome always` switches a song and re-targets the project, then re-render.
+A plain click on every quarter note, following the song's real beats rather than a fixed grid,
+so it stays with a song that drifts. Beat trackers flip into double time or skip beats in loose
+passages, so the grid is cleaned first: the quarter-note length is chosen within a plausible
+tempo range, extra beats of double-time runs are dropped in phase, clearly missing beats are
+filled, genuine slow-downs are kept. `backline.json` reports what was done (`grid.bpm`,
+`beats_dropped`, `beats_inserted`). Modes in `backline.toml`: `always` (default), `gaps` (only
+where the drum stem goes quiet for a bar or more — intros, breakdowns, stops), `off`.
+`backline resimplify <job> --metronome gaps` switches a song, then re-render.
 
 *Conservative vs daring:* the conservative MIDI uses the transcriber's default thresholds and
 rarely invents hits but is shy on toms and cymbals; the daring one lowers the thresholds and
@@ -176,7 +176,7 @@ bars = 2
 note = 37
 
 [metronome]
-mode = "gaps"            # gaps | always | off
+mode = "always"          # always | gaps | off
 min_gap_bars = 1
 silence_db = -30
 ```
@@ -390,7 +390,7 @@ sequenceDiagram
 - `lyrics.py` / `lrclib.py` — identification, lookup, ranking, and the vocal-stem timing check.
 - `midi_out.py` — one `Sequence` (count-in, shift, note ticks) feeds both the `.mid` writer and the Reaper project, so they can never disagree.
 - `reference.py` — the original on the count-in timeline, clicks synthesized.
-- `metronome.py` — gaps from the drum stem's per-beat level; clicks on the real beats, into the project's left channel.
+- `metronome.py` — a plain click per quarter note on the cleaned beat grid (`tempo.regularize`), into the project's left channel; optional gap mode from the drum stem's per-beat level.
 - `reaper.py` — the practice-mix project, your FX chain, render settings, lyric markers.
 - `pipeline.py` — stages with per-job caching; `config.py` — `backline.toml` and song folders.
 
