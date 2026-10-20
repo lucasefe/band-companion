@@ -47,7 +47,8 @@ Model weights (~80 MB for Demucs, ~78 MB for Beat This!) download automatically 
 
 ```bash
 drums2midi run <audio-file> [options]
-    --out DIR             output root (default ~/Music/Drums2MIDI)
+    --out DIR             root for job folders (default ~/Music/Drums2MIDI)
+    --to DIR              deliver the .lrc and the render into this song folder
     --quality fast|best   Demucs htdemucs (default) or htdemucs_ft (~4× slower, a bit cleaner)
     --count-in BARS       bars of side-stick count-in before the first downbeat (default 2; 0 = none)
     --count-in-note N     MIDI note for the click (default 37, GM side stick)
@@ -59,7 +60,7 @@ drums2midi run <audio-file> [options]
     --lyrics-offset SEC   shift the lyrics by hand (skips the automatic check)
     --no-lyrics
 
-drums2midi resimplify <job-dir> [--count-in 0 …]   # regenerate MIDI/Reaper from cached analysis
+drums2midi resimplify <job-dir> [--count-in 0 … --to DIR]   # regenerate outputs from cached analysis
 drums2midi lyrics <job-dir> [--artist … --title … --offset …]   # redo only the lyrics
 drums2midi fx-template <project.RPP>                 # remember your drum VSTi for new projects
 drums2midi doctor                                    # check tools, packages, GPU
@@ -71,21 +72,26 @@ Supported inputs: wav, mp3, m4a, aac, flac, aiff, ogg, opus, or any URL `yt-dlp`
 ## What you get
 
 ```
-~/Music/Drums2MIDI/<title> (<hash>)/
-├── drums.mid           the drums, conservative detection, with count-in   ← the deliverable
-├── drums-daring.mid    same timeline, lower thresholds: more toms/cymbals/ghost notes
-├── lyrics.lrc          timed lyrics on the same timeline as the MIDI: countdown, then the song
-├── lyrics-original.lrc the same lines in song time, for the untouched original.wav
-├── lyrics.txt / lyrics.json   plain text; where the lyrics came from and the timing evidence
-├── project.RPP         Reaper project (see below)
-├── original.wav        your song, 44.1 kHz stereo
-├── drums.wav           the isolated drum stem (Demucs)
-├── vocals.wav          the vocal stem, mono 16 kHz (used to check the lyrics timing)
-├── notes.json / notes-daring.json   the hits with time, class, velocity, confidence
-├── beats.json          beats, downbeats, BPM, meter
-├── activations.npy     raw ADTOF output (for re-simplifying without re-running the models)
-└── manifest.json       what ran, with which parameters
+~/Music/Drums2MIDI/Juanes - Fotografia (4b74e33d)/
+├── Fotografia.RPP            ← the only thing you open; File → Render is pre-targeted at output/
+├── input/
+│   ├── source.webm           what yt-dlp downloaded (or your file, copied as-is)
+│   ├── source.json           where it came from
+│   └── original.wav          44.1 kHz stereo; everything is analysed from this
+├── work/                     intermediate; safe to delete, a re-run rebuilds it
+│   ├── drums.wav · vocals.wav · activations.npy · beats.json
+│   ├── notes.json · notes-daring.json · lyrics.json · lyrics.txt
+│   └── lyrics-original.lrc   song time, for the untouched original.wav
+└── output/                   a Band Companion song folder
+    ├── Fotografia.lrc        count-in timeline: countdown, then the song
+    ├── Fotografia.wav        ← Reaper renders here
+    ├── Fotografia.mid        the drums (conservative), with count-in
+    └── Fotografia (daring).mid
 ```
+
+With `--to "<tracks>/<set>/<NN - Title>"` the `.lrc` is written into that folder and the project's
+render target points there, so after rendering the song folder is complete — no copying, no
+renaming. The MIDI files stay in the job's `output/`.
 
 **The count-in.** Two bars of side stick at the song's tempo, ending exactly on the song's first
 downbeat. The song's bar 1 is therefore bar 3 in the DAW, and bar lines land on the song's bars.
@@ -107,7 +113,7 @@ project), so the render is one click and lines up with `lyrics.lrc` — count-in
 **Your drum instrument.** Set it up once in Reaper on the MIDI track, save the project, then:
 
 ```bash
-drums2midi fx-template "~/Music/Drums2MIDI/<job>/project.RPP"
+drums2midi fx-template "~/Music/Drums2MIDI/<job>/<Title>.RPP"
 ```
 
 The FX chain (plugin and its state, e.g. the loaded kit) is stored in
@@ -115,8 +121,16 @@ The FX chain (plugin and its state, e.g. the loaded kit) is stored in
 generated from then on. `drums2midi fx-template` shows what is stored; `--clear` removes it. A
 Reaper-exported `.RfxChain` dropped at that path works too.
 
-**Your edits are safe.** Once Reaper has saved `project.RPP`, drums2midi never writes to it again;
-a regeneration (`resimplify`, `lyrics`) goes to `project.new.RPP` next to it.
+**Your edits are safe.** Once Reaper has saved `<Title>.RPP`, drums2midi never writes to it again;
+a regeneration (`resimplify`, `lyrics`) goes to `<Title>.new.RPP` next to it.
+
+**Band Companion workflow.**
+
+```bash
+drums2midi run "https://youtu.be/…" --to "~/Code/band-companion/tracks/Cumple de Guille/02 - Fotografía"
+# open Fotografia.RPP → File → Render → Fotografia.wav appears in that folder
+cd ~/Code/band-companion && npm run sync-audio
+```
 
 **Conservative vs daring.** The conservative file uses the transcriber's default thresholds and
 rarely invents hits, but it is shy on toms and cymbals. The daring file lowers the thresholds

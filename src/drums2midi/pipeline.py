@@ -1,37 +1,24 @@
 from __future__ import annotations
 
+import json
+import shutil
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from drums2midi import job as J
 from drums2midi.job import DEFAULT_ROOT, Job, source_hash
 
-PRIMARY = "conservative"  # the unmuted MIDI track and drums.mid; other profiles get a suffix
-OUTPUT_FORMAT = 3  # bump when the output stage writes different files/content for the same inputs
-
-
-def project_target(job: Job) -> Path:
-    """Where to write the Reaper project: never over a file Reaper has saved (user edits)."""
-    from drums2midi.reaper import is_generated
-
-    main = job.path("project.RPP")
-    if main.exists() and not is_generated(main):
-        return job.path("project.new.RPP")
-    return main
-
-
-def notes_file(profile: str) -> str:
-    return "notes.json" if profile == PRIMARY else f"notes-{profile}.json"
-
-
-def midi_file(profile: str) -> str:
-    return "drums.mid" if profile == PRIMARY else f"drums-{profile}.mid"
+PRIMARY = "conservative"  # the unmuted MIDI track and <title>.mid; other profiles get a suffix
+OUTPUT_FORMAT = 4  # bump when the output stage writes different files/content for the same inputs
 
 
 @dataclass
 class RunOptions:
     out_root: Path = DEFAULT_ROOT
+    deliver_to: Path | None = None  # a Band Companion song folder for the .lrc and the render
     quality: str = "fast"
     style: str = "raw"
     grid: int = 16
@@ -67,46 +54,79 @@ class NullReporter:
 class RunResult:
     job: Job
     beats: Any
-    notes: list
     layout: Any
-    midi_path: Path
-    rpp_path: Path
     counts: dict[str, dict[str, int]]  # profile -> class -> hits
     lyrics: dict[str, Any]  # contents of lyrics.json
+    project_path: Path
+    output_dir: Path
+    outputs: dict[str, Path]  # lrc / midi / render target
+    fx_chain: bool
     timings: dict[str, float] = field(default_factory=dict)
 
 
 def run(source: str, opts: RunOptions, reporter: Reporter | None = None) -> RunResult:
-    from drums2midi.ingest import ingest_file, ingest_url, is_url, probe_url, title_for_file
+    from drums2midi.ingest import (
+        ingest_file,
+        ingest_url,
+        is_url,
+        probe_url,
+    )
+    from drums2midi.lyrics import hints_from_file, hints_from_youtube
 
     reporter = reporter or NullReporter()
 
     if is_url(source):
         meta = probe_url(source)
         canonical = meta.get("webpage_url") or source
+        hints = hints_from_youtube(meta, float(meta.get("duration") or 0))
         job = Job.create(
-            opts.out_root, meta.get("title") or canonical, canonical, source_hash(canonical)
+            opts.out_root,
+            title=opts.title or hints.title or meta.get("title") or "untitled",
+            artist=opts.artist or hints.artist,
+            source=canonical,
+            hash=source_hash(canonical),
         )
-        job.manifest["source_meta"] = meta
-        job.save()
         runner = _Runner(job, opts, reporter)
 
-        def do_ingest() -> dict:
+        def do_ingest_url() -> dict:
             downloaded = ingest_url(
-                canonical, job.path("original.wav"), job.dir, progress=reporter.progress
+                canonical, job.path(J.ORIGINAL), job.path(J.INPUT), progress=reporter.progress
+            )
+            _write_source_json(
+                job, {"kind": "url", "url": canonical, "file": downloaded.name, "meta": meta}
             )
             return {"downloaded": downloaded.name}
 
-        runner.stage("ingest", {}, do_ingest, detail="yt-dlp", determinate=True)
+        runner.stage(
+            "ingest",
+            {},
+            do_ingest_url,
+            [J.ORIGINAL, J.SOURCE_JSON],
+            detail="yt-dlp",
+            determinate=True,
+        )
     else:
         src = Path(source).expanduser().resolve()
-        job = Job.create(opts.out_root, title_for_file(src), str(src), source_hash(src))
+        if not src.is_file():
+            raise FileNotFoundError(f"file not found: {src}")
+        hints = hints_from_file(src, 0.0)
+        job = Job.create(
+            opts.out_root,
+            title=opts.title or hints.title or src.stem,
+            artist=opts.artist or hints.artist,
+            source=str(src),
+            hash=source_hash(src),
+        )
         runner = _Runner(job, opts, reporter)
 
-        def do_ingest_file() -> None:
-            ingest_file(src, job.path("original.wav"))
+        def do_ingest_file() -> dict:
+            copy = job.path(J.INPUT) / f"source{src.suffix.lower()}"
+            shutil.copy2(src, copy)
+            ingest_file(copy, job.path(J.ORIGINAL))
+            _write_source_json(job, {"kind": "file", "path": str(src), "file": copy.name})
+            return {"copied": copy.name}
 
-        runner.stage("ingest", {}, do_ingest_file, detail=src.name)
+        runner.stage("ingest", {}, do_ingest_file, [J.ORIGINAL, J.SOURCE_JSON], detail=src.name)
 
     return runner.process()
 
@@ -129,12 +149,26 @@ def options_from_job(job: Job, **overrides: Any) -> RunOptions:
     saved = job.manifest.get("options", {})
     kwargs = {k: v for k, v in saved.items() if k in RunOptions.__dataclass_fields__}
     kwargs.update({k: v for k, v in overrides.items() if v is not None})
-    if "out_root" in kwargs:
-        kwargs["out_root"] = Path(kwargs["out_root"])
-    if kwargs.get("lyrics_file"):
-        kwargs["lyrics_file"] = Path(kwargs["lyrics_file"])
+    for key in ("out_root", "deliver_to", "lyrics_file"):
+        if kwargs.get(key):
+            kwargs[key] = Path(kwargs[key])
     kwargs["force"] = bool(overrides.get("force", False))
     return RunOptions(**kwargs)
+
+
+def project_target(job: Job) -> Path:
+    """Where to write the Reaper project: never over a file Reaper has saved (user edits)."""
+    from drums2midi.reaper import is_generated
+
+    main = job.project_path
+    if main.exists() and not is_generated(main):
+        return main.with_name(f"{job.file_stem}.new.RPP")
+    return main
+
+
+def _write_source_json(job: Job, payload: dict[str, Any]) -> None:
+    payload["ingested_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    job.path(J.SOURCE_JSON).write_text(json.dumps(payload, indent=1, ensure_ascii=False))
 
 
 class _Runner:
@@ -154,8 +188,18 @@ class _Runner:
         }
         job.save()
 
-    def stage(self, name, params, fn, *, detail="", determinate=False) -> dict[str, Any]:
-        if not self.dirty and name not in self.rerun and self.job.is_done(name, params):
+    def stage(
+        self,
+        name: str,
+        params: dict[str, Any],
+        fn: Callable[[], dict | None],
+        artifacts: list[str | Path],
+        *,
+        detail: str = "",
+        determinate: bool = False,
+    ) -> dict[str, Any]:
+        paths = [a if isinstance(a, Path) else self.job.path(a) for a in artifacts]
+        if not self.dirty and name not in self.rerun and self.job.is_done(name, params, paths):
             self.reporter.skipped(name, "cached")
             return self.job.stage_info(name)
         self.dirty = True
@@ -170,8 +214,6 @@ class _Runner:
         return self.job.stage_info(name)
 
     def process(self) -> RunResult:
-        import json
-
         from drums2midi.audio import duration_seconds
         from drums2midi.midi_out import CountIn, build_sequence, write_midi
         from drums2midi.reaper import (
@@ -200,43 +242,48 @@ class _Runner:
 
         def do_separate() -> dict:
             used = separate(
-                job.path("original.wav"),
-                job.path("drums.wav"),
+                job.path(J.ORIGINAL),
+                job.path(J.DRUMS),
                 quality=opts.quality,
                 device=opts.device,
-                vocals_wav=job.path("vocals.wav"),
-                no_drums_wav=job.path("no_drums.wav") if opts.keep_other else None,
+                vocals_wav=job.path(J.VOCALS),
+                no_drums_wav=job.path(J.NO_DRUMS) if opts.keep_other else None,
                 progress=self.reporter.progress,
             )
             return {"device": used}
 
-        self.stage("separate", {"model": model}, do_separate, detail=model, determinate=True)
+        self.stage(
+            "separate",
+            {"model": model},
+            do_separate,
+            [J.DRUMS, J.VOCALS],
+            detail=model,
+            determinate=True,
+        )
 
         def do_transcribe() -> dict:
-            act = transcribe(job.path("drums.wav"), job.path("activations.npy"))
+            act = transcribe(job.path(J.DRUMS), job.path(J.ACTIVATIONS))
             return {"frames": int(act.shape[0])}
 
-        self.stage("transcribe", {}, do_transcribe, detail="adtof")
+        self.stage("transcribe", {}, do_transcribe, [J.ACTIVATIONS], detail="adtof")
 
         def do_tempo() -> dict:
-            beats = detect_beats(
-                job.path("original.wav"), device=opts.device, model=opts.tempo_model
-            )
-            beats.save(job.path("beats.json"))
+            beats = detect_beats(job.path(J.ORIGINAL), device=opts.device, model=opts.tempo_model)
+            beats.save(job.path(J.BEATS))
             return {"bpm": beats.bpm, "meter": beats.meter}
 
-        self.stage("tempo", {"model": opts.tempo_model}, do_tempo, detail="beat_this")
-        beats = Beats.load(job.path("beats.json"))
+        self.stage("tempo", {"model": opts.tempo_model}, do_tempo, [J.BEATS], detail="beat_this")
+        beats = Beats.load(job.path(J.BEATS))
 
         def do_simplify() -> dict:
-            activations = load_activations(job.path("activations.npy"))
+            activations = load_activations(job.path(J.ACTIVATIONS))
             counts = {}
             for profile, thresholds in PROFILES.items():
                 notes = simplify(
                     activations, beats, style=opts.style, grid=opts.grid, thresholds=thresholds
                 )
                 save_notes(
-                    job.path(notes_file(profile)),
+                    job.path(J.notes_file(profile, PRIMARY)),
                     notes,
                     {"style": opts.style, "grid": opts.grid, "profile": profile},
                 )
@@ -251,9 +298,10 @@ class _Runner:
                 "profiles": {p: list(t) for p, t in PROFILES.items()},
             },
             do_simplify,
+            [J.notes_file(p, PRIMARY) for p in PROFILES],
             detail=opts.style,
         )
-        notes = {p: load_notes(job.path(notes_file(p))) for p in PROFILES}
+        notes = {p: load_notes(job.path(J.notes_file(p, PRIMARY))) for p in PROFILES}
 
         lyrics_params = {
             "enabled": opts.lyrics,
@@ -262,42 +310,53 @@ class _Runner:
             "file": str(opts.lyrics_file) if opts.lyrics_file else None,
             "offset": opts.lyrics_offset,
         }
-        self.stage("lyrics", lyrics_params, lambda: self._do_lyrics(), detail="lrclib")
-        lyrics_info = json.loads(job.path("lyrics.json").read_text())
+        self.stage("lyrics", lyrics_params, self._do_lyrics, [J.LYRICS_JSON], detail="lrclib")
+        lyrics_info = json.loads(job.path(J.LYRICS_JSON).read_text())
 
         count_in = (
             CountIn(bars=opts.count_in, note=opts.count_in_note) if opts.count_in > 0 else None
         )
-        output_params = {
-            "count_in": opts.count_in,
-            "count_in_note": opts.count_in_note,
-            "tempo": "constant",
-            "format": OUTPUT_FORMAT,
-        }
         seqs = {p: build_sequence(notes[p], beats, count_in=count_in) for p in PROFILES}
         layout = seqs[PRIMARY].layout
         song_lines = [(t, text) for t, text in lyrics_info.get("lines_song_time", [])]
         lyric_lines = [(t + layout.shift, text) for t, text in song_lines]
 
+        out_dir = job.output_dir(opts.deliver_to)
+        stem = job.file_stem
+        outputs = {
+            "lrc": out_dir / f"{stem}.lrc",
+            "render": out_dir / f"{stem}.wav",
+            "midi": job.path(J.OUTPUT) / f"{stem}.mid",
+            "midi_daring": job.path(J.OUTPUT) / f"{stem} (daring).mid",
+        }
+        midi_files = {PRIMARY: outputs["midi"], "daring": outputs["midi_daring"]}
+        output_params = {
+            "count_in": opts.count_in,
+            "count_in_note": opts.count_in_note,
+            "tempo": "constant",
+            "format": OUTPUT_FORMAT,
+            "deliver_to": str(opts.deliver_to) if opts.deliver_to else None,
+        }
+        fx_chain = load_fx_template()
+
         def do_output() -> dict:
+            out_dir.mkdir(parents=True, exist_ok=True)
             for profile, seq in seqs.items():
                 write_midi(
-                    job.path(midi_file(profile)),
-                    seq,
-                    track_name=f"{job.title} {profile}",
-                    lyrics=lyric_lines,
+                    midi_files[profile], seq, track_name=f"{stem} {profile}", lyrics=lyric_lines
                 )
-            self._write_lrc_files(lyrics_info, song_lines, lyric_lines, layout, count_in)
-            duration = duration_seconds(job.path("original.wav"))
-            fx_chain = load_fx_template()
+            self._write_lrc_files(
+                outputs["lrc"], lyrics_info, song_lines, lyric_lines, layout, count_in
+            )
+            duration = duration_seconds(job.path(J.ORIGINAL))
             rpp_path = project_target(job)
             write_rpp(
                 rpp_path,
                 # The practice mix: real drums muted (unmute to compare), MIDI drums centred,
                 # the song quiet on the right so the drummer can hear it without it dominating.
                 stem=AudioTrack(
-                    name=f"{job.title} (drums)",
-                    file="drums.wav",
+                    name=f"{stem} (drums)",
+                    file=J.DRUMS,
                     duration=duration,
                     position=layout.shift,
                     pan=-1.0,
@@ -306,8 +365,8 @@ class _Runner:
                 ),
                 midi=[
                     MidiTrack(
-                        name=f"{job.title} (MIDI {profile})",
-                        item_name=f"{job.title} {profile}",
+                        name=f"{stem} (MIDI {profile})",
+                        item_name=f"{stem} {profile}",
                         seq=seq,
                         pan=0.0 if profile == PRIMARY else 1.0,
                         muted=profile != PRIMARY,
@@ -316,34 +375,43 @@ class _Runner:
                     for profile, seq in seqs.items()
                 ],
                 original=AudioTrack(
-                    name=f"{job.title} (original)",
-                    file="original.wav",
+                    name=f"{stem} (original)",
+                    file=J.ORIGINAL,
                     duration=duration,
                     position=layout.shift,
                     pan=ORIGINAL_PAN,
                     volume_db=ORIGINAL_VOLUME_DB,
                 ),
                 markers=lyric_lines,
-                render=RenderSettings(directory=str(job.dir), pattern=f"{job.title} (practice)"),
+                render=RenderSettings(directory=str(out_dir), pattern=stem),
             )
             return {
                 "shift": layout.shift,
                 "count_in_seconds": layout.count_in_seconds,
                 "project": rpp_path.name,
+                "output_dir": str(out_dir),
                 "fx_chain": fx_chain is not None,
             }
 
-        self.stage("output", output_params, do_output, detail="midi + lrc + rpp")
+        self.stage(
+            "output",
+            output_params,
+            do_output,
+            [outputs["midi"], outputs["midi_daring"], job.project_path],
+            detail="midi + lrc + rpp",
+        )
+        info = job.stage_info("output")
 
         return RunResult(
             job=job,
             beats=beats,
-            notes=notes[PRIMARY],
             layout=layout,
-            midi_path=job.path(midi_file(PRIMARY)),
-            rpp_path=job.path(job.stage_info("output").get("project", "project.RPP")),
             counts={p: count_by_class(n) for p, n in notes.items()},
             lyrics=lyrics_info,
+            project_path=job.dir / info.get("project", job.project_path.name),
+            output_dir=out_dir,
+            outputs=outputs,
+            fx_chain=bool(info.get("fx_chain")),
             timings=self.timings,
         )
 
@@ -355,9 +423,8 @@ class _Runner:
         """
         from drums2midi.audio import duration_seconds
         from drums2midi.lyrics import (
+            Hints,
             estimate_offset,
-            hints_from_file,
-            hints_from_youtube,
             lyrics_from_file,
             lyrics_from_lrclib,
             lyrics_to_dict,
@@ -366,22 +433,19 @@ class _Runner:
         )
 
         job, opts = self.job, self.opts
-        job.path("lyrics.txt").unlink(missing_ok=True)
+        job.path(J.LYRICS_TXT).unlink(missing_ok=True)
         payload: dict[str, Any] = {"found": False, "lines_song_time": []}
         if not opts.lyrics:
             payload["reason"] = "disabled"
-            _write_lyrics_json(job, payload)
+            self._write_lyrics_json(payload)
             return {"detail": "skipped"}
 
-        duration = duration_seconds(job.path("original.wav"))
-        if job.manifest.get("source_meta"):
-            hints = hints_from_youtube(job.manifest["source_meta"], duration)
-        else:
-            hints = hints_from_file(Path(job.manifest["source"]), duration)
-        if opts.artist:
-            hints.artist = opts.artist
-        if opts.title:
-            hints.title = opts.title
+        duration = duration_seconds(job.path(J.ORIGINAL))
+        hints = Hints(
+            artist=opts.artist or job.artist,
+            title=opts.title or job.title,
+            duration=duration,
+        )
         payload["hints"] = {"artist": hints.artist, "title": hints.title, "duration": duration}
 
         try:
@@ -393,20 +457,20 @@ class _Runner:
             payload["considered"] = considered
         except Exception as e:  # noqa: BLE001
             payload["error"] = f"{type(e).__name__}: {e}"
-            _write_lyrics_json(job, payload)
+            self._write_lyrics_json(payload)
             return {"detail": "[red]lookup failed[/]"}
 
         if lyrics is None:
             payload["reason"] = "no match on lrclib"
-            _write_lyrics_json(job, payload)
+            self._write_lyrics_json(payload)
             return {"detail": "[yellow]not found[/]"}
 
         if lyrics.synced:
             if opts.lyrics_offset is not None:
                 lyrics.offset = opts.lyrics_offset
                 payload["offset"] = {"applied": lyrics.offset, "source": "manual"}
-            elif job.path("vocals.wav").exists():
-                est = estimate_offset(lyrics, vocal_activity(job.path("vocals.wav")))
+            elif job.path(J.VOCALS).exists():
+                est = estimate_offset(lyrics, vocal_activity(job.path(J.VOCALS)))
                 lyrics.offset = est.applied
                 lyrics.confidence = est.agreement_at_applied
                 payload["offset"] = {
@@ -417,7 +481,7 @@ class _Runner:
                     "source": "vocal stem",
                 }
 
-        job.path("lyrics.txt").write_text(plain_text(lyrics), encoding="utf-8")
+        job.path(J.LYRICS_TXT).write_text(plain_text(lyrics), encoding="utf-8")
         payload.update(
             {
                 "found": True,
@@ -430,21 +494,26 @@ class _Runner:
                 "lines_song_time": [[ln.time + lyrics.offset, ln.text] for ln in lyrics.timed],
             }
         )
-        _write_lyrics_json(job, payload)
+        self._write_lyrics_json(payload)
 
         who = f"{lyrics.meta.get('artist', '?')} – {lyrics.meta.get('title', '?')}"
         kind = f"{len(lyrics.timed)} lines" if lyrics.synced else "text only"
         return {"detail": f"{who} · {kind}", "source": lyrics.source}
 
-    def _write_lrc_files(self, lyrics_info, song_lines, lyric_lines, layout, count_in) -> None:
-        """lyrics.lrc on the count-in timeline (with a visible countdown), lyrics-original.lrc
-        in song time for the untouched original.wav."""
+    def _write_lyrics_json(self, payload: dict[str, Any]) -> None:
+        from drums2midi.lyrics import save_lyrics_json
+
+        save_lyrics_json(self.job.path(J.LYRICS_JSON), payload)
+
+    def _write_lrc_files(self, lrc_path, lyrics_info, song_lines, lyric_lines, layout, count_in):
+        """`<stem>.lrc` on the count-in timeline (with a visible countdown) in the output folder;
+        `work/lyrics-original.lrc` in song time for the untouched original."""
         from drums2midi.audio import duration_seconds
         from drums2midi.lyrics import countdown_lines, format_lrc
 
         job = self.job
-        for name in ("lyrics.lrc", "lyrics-original.lrc"):
-            job.path(name).unlink(missing_ok=True)
+        lrc_path.unlink(missing_ok=True)
+        job.path(J.LYRICS_ORIGINAL).unlink(missing_ok=True)
         if not song_lines:
             return
 
@@ -461,22 +530,16 @@ class _Runner:
                 "re": "drums2midi",
             }
 
-        duration = duration_seconds(job.path("original.wav"))
+        duration = duration_seconds(job.path(J.ORIGINAL))
         countdown = (
             countdown_lines(layout.count_in_start, count_in.bars, layout.meter, 60.0 / layout.bpm)
             if count_in
             else []
         )
-        job.path("lyrics.lrc").write_text(
+        lrc_path.write_text(
             format_lrc(countdown + lyric_lines, header=header(layout.shift + duration)),
             encoding="utf-8",
         )
-        job.path("lyrics-original.lrc").write_text(
+        job.path(J.LYRICS_ORIGINAL).write_text(
             format_lrc(song_lines, header=header(duration)), encoding="utf-8"
         )
-
-
-def _write_lyrics_json(job: Job, payload: dict[str, Any]) -> None:
-    from drums2midi.lyrics import save_lyrics_json
-
-    save_lyrics_json(job.path("lyrics.json"), payload)

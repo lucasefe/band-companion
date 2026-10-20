@@ -8,8 +8,8 @@ project. No GUI. `PLAN.md` is the design document; this file is the operating ma
 ```bash
 mise install            # toolchain (python 3.12, uv, ffmpeg, yt-dlp) + `uv sync` via postinstall
 drums2midi doctor       # all green = environment is fine
-drums2midi run <file|url>   # full pipeline → ~/Music/Drums2MIDI/<title> (<hash>)/
-drums2midi resimplify <job-dir> [--count-in 0 ...]   # reruns only simplify/output
+drums2midi run <file|url> [--to <song folder>]   # → ~/Music/Drums2MIDI/<Artist - Title> (<hash>)/
+drums2midi resimplify <job-dir> [--count-in 0 ... --to DIR]   # reruns only simplify/output
 drums2midi lyrics <job-dir> [--artist .. --title .. --offset ..]   # reruns only lyrics/output
 drums2midi fx-template <saved.RPP>   # store the user's drum VSTi chain → ~/.config/drums2midi/
 
@@ -26,9 +26,12 @@ Reference material used for tuning:
   (Cristian Castro; 120 BPM, 4/4, first downbeat 1.46 s; job `~/Music/Drums2MIDI/NoPodras (b1660813)`).
   A hand-made `NoPodras.lrc` sits next to it for comparing lyrics timing.
 - `https://www.youtube.com/watch?v=flr8vDQ9Wuc` (Juanes – Fotografía, music video; 244 s vs the
-  241 s album cut → lyrics offset +0.80 s is expected and correct).
-The consumer of `lyrics.lrc` is Band Companion (`~/Code/lucasefe/band-companion`): line-level
-`[mm:ss.xx]text`, untimed lines ignored.
+  241 s album cut → lyrics offset +0.80 s is expected and correct). Current job:
+  `~/Music/Drums2MIDI/Juanes - Fotografia (4b74e33d)`, delivered with `--to` into
+  `~/Code/lucasefe/band-companion/tracks/Cumple de Guille/02 - Fotografía`.
+The consumer of the `.lrc` is Band Companion (`~/Code/lucasefe/band-companion`): one folder per
+song with exactly one `.wav` and one `.lrc`/`.txt`; other files are ignored; untimed lines ignored.
+Never touch that repo's `tracks/` beyond the song folder passed with `--to`.
 
 ## Layout
 
@@ -36,7 +39,7 @@ The consumer of `lyrics.lrc` is Band Companion (`~/Code/lucasefe/band-companion`
 src/drums2midi/
   cli.py        typer app: run / resimplify / doctor. Rich output to stderr; stdout stays empty.
   pipeline.py   stage orchestration + caching (_Runner), RunOptions/RunResult, profile file names
-  job.py        job folder, manifest.json, ARTIFACTS per stage, is_done()/mark_done()
+  job.py        job folder layout (input/ work/ output/), path constants, manifest, is_done()/mark_done()
   ingest.py     file or URL → original.wav (ffmpeg; URLs via `yt-dlp` subprocess, --dump-json first)
   separate.py   Demucs htdemucs → drums.wav + vocals.wav (MPS, CPU fallback, progress callback)
   transcribe.py ADTOF → activations.npy [frames, 5] @ 100 fps
@@ -53,9 +56,13 @@ tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop with kn
 
 ## Architecture rules
 
-- **Stages are cached per job.** Each stage lists its artifacts in `job.ARTIFACTS` and its
-  parameters in the `stage()` call. Once a stage runs, every later stage runs too (`_Runner.dirty`).
-  If you add an output file, add it to `ARTIFACTS` or it will never be regenerated. Params must
+- **Job layout is fixed: `input/`, `work/`, `output/`, and `<Title>.RPP` in the root — nothing
+  else in the root.** All relative paths are constants in `job.py` (`J.ORIGINAL`, `J.DRUMS`, …);
+  never build `"work/..."` strings elsewhere. `--to DIR` redirects the `.lrc` and the render
+  target to a Band Companion song folder; MIDI stays in `output/`.
+- **Stages are cached per job.** Each `stage()` call passes its params and the list of artifacts
+  it produces. Once a stage runs, every later stage runs too (`_Runner.dirty`). If you add an
+  output file, add it to that stage's artifact list or it will never be regenerated. Params must
   be JSON-round-trippable (lists, not tuples) or the cache will never hit.
 - **One `Sequence`, two renderers.** `build_sequence()` is the single source of truth for ticks
   (count-in, shift, note events). `write_midi()` and `reaper.py` both consume it; never compute
@@ -72,8 +79,8 @@ tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop with kn
   (`lines_song_time`); the **output stage** writes every timed artifact — `lyrics.lrc`
   (count-in timeline, countdown lines first), `lyrics-original.lrc` (song time), markers, MIDI
   lyric events — because only it knows `Layout.shift`.
-- **Never overwrite a Reaper-saved `project.RPP`.** `project_target()` checks the header
-  (`is_generated`); if Reaper saved it, the regeneration goes to `project.new.RPP`. This rule
+- **Never overwrite a Reaper-saved `<Title>.RPP`.** `project_target()` checks the header
+  (`is_generated`); if Reaper saved it, the regeneration goes to `<Title>.new.RPP`. This rule
   exists because an early `resimplify` clobbered the user's mix settings.
 - **FX template.** `~/.config/drums2midi/midi-track.RfxChain` (inner lines of an `<FXCHAIN>`
   block, Reaper's own `.RfxChain` format) is injected on every MIDI track with a fresh `FXID`.

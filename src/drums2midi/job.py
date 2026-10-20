@@ -9,19 +9,25 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_ROOT = Path.home() / "Music" / "Drums2MIDI"
-MANIFEST = "manifest.json"
 
-# Artifacts each stage produces; a stage is cached when all of them exist
-# and the manifest says it ran with the same parameters.
-ARTIFACTS: dict[str, tuple[str, ...]] = {
-    "ingest": ("original.wav",),
-    "separate": ("drums.wav", "vocals.wav"),
-    "transcribe": ("activations.npy",),
-    "tempo": ("beats.json",),
-    "lyrics": ("lyrics.json",),  # .lrc/.txt only exist when lyrics were found
-    "simplify": ("notes.json", "notes-daring.json"),
-    "output": ("drums.mid", "drums-daring.mid", "project.RPP"),
-}
+# Job folder layout. `input/` is what we started from, `work/` is intermediate and disposable,
+# `output/` is a Band Companion song folder (one .lrc, one .wav rendered by Reaper, the MIDI).
+INPUT, WORK, OUTPUT = "input", "work", "output"
+MANIFEST = f"{WORK}/manifest.json"
+ORIGINAL = f"{INPUT}/original.wav"
+SOURCE_JSON = f"{INPUT}/source.json"
+DRUMS = f"{WORK}/drums.wav"
+VOCALS = f"{WORK}/vocals.wav"
+NO_DRUMS = f"{WORK}/no_drums.wav"
+ACTIVATIONS = f"{WORK}/activations.npy"
+BEATS = f"{WORK}/beats.json"
+LYRICS_JSON = f"{WORK}/lyrics.json"
+LYRICS_TXT = f"{WORK}/lyrics.txt"
+LYRICS_ORIGINAL = f"{WORK}/lyrics-original.lrc"
+
+
+def notes_file(profile: str, primary: str) -> str:
+    return f"{WORK}/notes.json" if profile == primary else f"{WORK}/notes-{profile}.json"
 
 
 def source_hash(src: str | Path) -> str:
@@ -37,10 +43,10 @@ def source_hash(src: str | Path) -> str:
     return h.hexdigest()[:8]
 
 
-def sanitize_title(title: str) -> str:
-    title = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "-", title)
-    title = re.sub(r"\s+", " ", title).strip(" .-")
-    return title[:80] or "untitled"
+def sanitize_name(name: str) -> str:
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "-", name)
+    name = re.sub(r"\s+", " ", name).strip(" .-")
+    return name[:80] or "untitled"
 
 
 @dataclass
@@ -49,15 +55,25 @@ class Job:
     manifest: dict[str, Any]
 
     @classmethod
-    def create(cls, root: Path, title: str, source: str, hash: str) -> Job:
-        dir = root / f"{sanitize_title(title)} ({hash})"
-        dir.mkdir(parents=True, exist_ok=True)
+    def create(
+        cls,
+        root: Path,
+        *,
+        title: str,
+        artist: str | None,
+        source: str,
+        hash: str,
+    ) -> Job:
+        name = f"{artist} - {title}" if artist else title
+        dir = root / f"{sanitize_name(name)} ({hash})"
+        for sub in (INPUT, WORK, OUTPUT):
+            (dir / sub).mkdir(parents=True, exist_ok=True)
         manifest_path = dir / MANIFEST
         if manifest_path.exists():
             manifest = json.loads(manifest_path.read_text())
         else:
             manifest = {
-                "title": title,
+                "song": {"artist": artist, "title": title},
                 "source": source,
                 "hash": hash,
                 "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -76,20 +92,36 @@ class Job:
 
     @property
     def title(self) -> str:
-        return self.manifest["title"]
+        return self.manifest["song"]["title"]
 
-    def path(self, name: str) -> Path:
-        return self.dir / name
+    @property
+    def artist(self) -> str | None:
+        return self.manifest["song"].get("artist")
 
-    def is_done(self, stage: str, params: dict[str, Any] | None = None) -> bool:
-        if not all(self.path(a).exists() for a in ARTIFACTS[stage]):
+    @property
+    def file_stem(self) -> str:
+        """Base name of the deliverables: <stem>.RPP / .lrc / .wav / .mid."""
+        return sanitize_name(self.title)
+
+    @property
+    def project_path(self) -> Path:
+        return self.dir / f"{self.file_stem}.RPP"
+
+    def path(self, rel: str) -> Path:
+        return self.dir / rel
+
+    def output_dir(self, deliver_to: Path | None = None) -> Path:
+        return deliver_to.expanduser().resolve() if deliver_to else self.dir / OUTPUT
+
+    def is_done(self, stage: str, params: dict[str, Any], artifacts: list[Path]) -> bool:
+        if not all(a.exists() for a in artifacts):
             return False
         record = self.manifest["stages"].get(stage)
-        return record is not None and record.get("params", {}) == (params or {})
+        return record is not None and record.get("params", {}) == params
 
-    def mark_done(self, stage: str, params: dict[str, Any] | None = None, **info: Any) -> None:
+    def mark_done(self, stage: str, params: dict[str, Any], **info: Any) -> None:
         self.manifest["stages"][stage] = {
-            "params": params or {},
+            "params": params,
             "done_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             **info,
         }
@@ -99,4 +131,5 @@ class Job:
         return self.manifest["stages"].get(stage, {})
 
     def save(self) -> None:
+        (self.dir / MANIFEST).parent.mkdir(parents=True, exist_ok=True)
         (self.dir / MANIFEST).write_text(json.dumps(self.manifest, indent=2, ensure_ascii=False))

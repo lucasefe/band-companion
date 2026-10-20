@@ -55,7 +55,13 @@ def main(
 @app.command()
 def run(
     source: str = typer.Argument(..., help="Audio file (wav, mp3, m4a, flac, aiff, ogg) or URL."),
-    out: Path = typer.Option(DEFAULT_ROOT, "--out", "-o", help="Root folder for job outputs."),
+    out: Path = typer.Option(DEFAULT_ROOT, "--out", "-o", help="Root folder for job folders."),
+    to: Path | None = typer.Option(
+        None,
+        "--to",
+        help="Deliver the .lrc and target the render into this song folder "
+        "(e.g. a Band Companion tracks/<set>/<NN - Title>/) instead of the job's output/.",
+    ),
     quality: Quality = typer.Option(
         Quality.fast, help="Demucs model: fast=htdemucs, best=htdemucs_ft (~4x slower)."
     ),
@@ -86,6 +92,7 @@ def run(
 
     opts = RunOptions(
         out_root=out.expanduser(),
+        deliver_to=to,
         quality=quality.value,
         style=style.value,
         grid=grid,
@@ -110,8 +117,9 @@ def resimplify(
     grid: int | None = typer.Option(None),
     count_in: int | None = typer.Option(None),
     count_in_note: int | None = typer.Option(None),
+    to: Path | None = typer.Option(None, "--to", help="Song folder for the .lrc and the render."),
 ) -> None:
-    """Regenerate notes, MIDI and the Reaper project from cached analysis (fast)."""
+    """Regenerate notes, MIDI, lyrics files and the Reaper project from cached analysis (fast)."""
     from drums2midi.pipeline import resimplify as resimplify_pipeline
 
     _execute(
@@ -122,6 +130,7 @@ def resimplify(
             grid=grid,
             count_in=count_in,
             count_in_note=count_in_note,
+            deliver_to=to,
         )
     )
 
@@ -250,7 +259,8 @@ def _print_summary(result) -> None:
     table = Table(show_header=False, box=None, pad_edge=False)
     table.add_column(style="bold")
     table.add_column(overflow="fold")
-    table.add_row("title", escape(job.title))
+    song = f"{job.artist} – {job.title}" if job.artist else job.title
+    table.add_row("song", escape(song))
     table.add_row(
         "tempo",
         f"{beats.bpm:g} bpm, {beats.meter}/4, first downbeat at {beats.first_downbeat:.2f}s",
@@ -261,20 +271,31 @@ def _print_summary(result) -> None:
     if layout.count_in_seconds:
         table.add_row(
             "count-in",
-            f"{layout.count_in_seconds:.2f}s; "
-            f"audio starts at {layout.shift:.3f}s in the DAW timeline",
+            f"{layout.count_in_seconds:.2f}s; the song starts at {layout.shift:.3f}s",
         )
-    table.add_row("midi", escape(str(result.midi_path)))
-    out_info = job.stage_info("output")
-    reaper_note = ""
-    if result.rpp_path.name != "project.RPP":
-        reaper_note = "  [yellow](project.RPP was saved by Reaper and left untouched)[/]"
-    elif not out_info.get("fx_chain"):
-        reaper_note = "  [dim](no drum VSTi template; see `drums2midi fx-template`)[/]"
-    table.add_row("reaper", escape(str(result.rpp_path)) + reaper_note)
-    table.add_row("folder", escape(str(job.dir)))
+    table.add_row("job", escape(str(job.dir)))
+    project_note = ""
+    if result.project_path != job.project_path:
+        project_note = (
+            f"  [yellow]({job.project_path.name} was saved by Reaper and left untouched)[/]"
+        )
+    elif not result.fx_chain:
+        project_note = "  [dim](no drum VSTi template yet; see `drums2midi fx-template`)[/]"
+    table.add_row("project", escape(str(result.project_path)) + project_note)
+    table.add_row("output", escape(str(result.output_dir)))
     console.print()
     console.print(table)
+    console.print()
+    console.print(
+        "[bold]Next:[/] open the project, File → Render (pre-filled) → "
+        f"[bold]{escape(result.outputs['render'].name)}[/] lands next to "
+        f"[bold]{escape(result.outputs['lrc'].name)}[/]"
+        + (
+            ""
+            if result.lyrics.get("found")
+            else "  [yellow](no lyrics were found, so there is no .lrc)[/]"
+        )
+    )
 
 
 def _lyrics_summary(info: dict) -> str:

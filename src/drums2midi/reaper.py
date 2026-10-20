@@ -139,7 +139,7 @@ def _audio_track(t: AudioTrack) -> list[str]:
         f"      POSITION {_num(t.position)}",
         f"      LENGTH {_num(t.duration)}",
         "      LOOP 0",
-        f"      NAME {_quote(t.file)}",
+        f"      NAME {_quote(Path(t.file).name)}",
         f"      IGUID {_guid()}",
         f"      GUID {_guid()}",
         "      <SOURCE WAVE",

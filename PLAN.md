@@ -185,7 +185,7 @@ waiting for Demucs again.
 A practice mix on the same timeline as `drums.mid`, ready to render. The user adds the drum
 instrument once; it is remembered as a template.
 - Project tempo = global BPM, time signature from meter; render pre-configured
-  (`RENDER_FILE` = job dir, `RENDER_PATTERN` = `<title> (practice)`, 24-bit WAV, 44.1 kHz).
+  (`RENDER_FILE` = the output folder, `RENDER_PATTERN` = `<Title>`, 24-bit WAV, 44.1 kHz).
 - Track 1 "<title> (drums)": `drums.wav` at `shift`, hard left, −9 dB, **muted**.
 - Track 2 "<title> (MIDI conservative)": in-project MIDI at 0, **centre**, with the FX chain
   from `~/.config/drums2midi/midi-track.RfxChain` if present (`drums2midi fx-template`).
@@ -193,8 +193,8 @@ instrument once; it is remembered as a template.
 - Track 4 "<title> (original)": `original.wav` at `shift`, pan +0.6, −16 dB, on.
 - One `MARKER` per lyric line. Events embedded in Reaper's `E <delta> <status> <d1> <d2>` format
   from the same `Sequence` as `drums.mid`.
-- **Never overwrite a Reaper save**: if `project.RPP`'s header is not ours, regenerate into
-  `project.new.RPP`.
+- **Never overwrite a Reaper save**: if `<Title>.RPP`'s header is not ours, regenerate into
+  `<Title>.new.RPP`.
 - Format derived from projects saved by Reaper 7 and locked with tests.
 
 ### lyrics (studio recordings only — no live/cover timing)
@@ -230,19 +230,17 @@ Later: Whisper (`mlx-whisper`) on the vocals stem for songs LRCLIB doesn't have.
 ### Job folder
 
 ```
-~/Music/Drums2MIDI/<title> (<hash>)/
-├── manifest.json      # source, hash, options, params per artifact, timings
-├── source.webm        # (URLs) what yt-dlp downloaded
-├── original.wav
-├── drums.wav / vocals.wav
-├── activations.npy
-├── beats.json
-├── notes.json / notes-daring.json
-├── drums.mid          ← the deliverable
-├── drums-daring.mid
-├── lyrics.lrc / lyrics-original.lrc / lyrics.txt / lyrics.json
-└── project.RPP
+~/Music/Drums2MIDI/<Artist - Title> (<hash>)/
+├── <Title>.RPP             the project; media paths relative, render target absolute
+├── input/                  source.<ext> (download or copy), source.json, original.wav
+├── work/                   manifest.json, stems, activations, beats, notes, lyrics.json/.txt,
+│                           lyrics-original.lrc — disposable
+└── output/                 <Title>.lrc, <Title>.mid, <Title> (daring).mid, [<Title>.wav render]
 ```
+
+`--to DIR` makes DIR (a Band Companion song folder) the home of the `.lrc` and the render target;
+MIDI stays in the job's `output/`. Path constants live in `job.py`; stages declare their artifacts
+explicitly. Nothing is written to the job root except the project file.
 
 ---
 

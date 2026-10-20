@@ -16,12 +16,12 @@ def project(loop_beats, tmp_path: Path) -> str:
     path = tmp_path / "project.RPP"
     write_rpp(
         path,
-        stem=AudioTrack("drums", "drums.wav", 9.6, seq.layout.shift, pan=-1, volume_db=-6),
+        stem=AudioTrack("drums", "work/drums.wav", 9.6, seq.layout.shift, pan=-1, volume_db=-6),
         midi=[
             MidiTrack("Song 'A' (MIDI)", 'Song "A"', seq, pan=1),
             MidiTrack("daring", "daring", daring, pan=1, muted=True),
         ],
-        original=AudioTrack("orig", "original.wav", 9.6, seq.layout.shift, muted=True),
+        original=AudioTrack("orig", "input/original.wav", 9.6, seq.layout.shift, muted=True),
     )
     return path.read_text()
 
@@ -45,7 +45,7 @@ def test_audio_tracks_are_positioned_and_panned(project: str):
     assert "VOLPAN 0.5011872336 -1 -1 -1 1" in stem  # -6 dB, hard left
     assert "MUTESOLO 0 0 0" in stem
     assert "POSITION 4.8" in stem
-    assert 'FILE "drums.wav"' in stem
+    assert 'FILE "work/drums.wav"' in stem and 'NAME "drums.wav"' in stem
 
     original = project.split("<TRACK")[4]
     assert "MUTESOLO 1 0 0" in original
@@ -197,9 +197,9 @@ def test_project_target_never_overwrites_a_reaper_save(tmp_path: Path):
     from drums2midi.pipeline import project_target
     from drums2midi.reaper import HEADER
 
-    job = Job.create(tmp_path, "Song", "/x.wav", "abcd1234")
-    assert project_target(job) == job.path("project.RPP")
-    job.path("project.RPP").write_text(HEADER + "\n>\n")
-    assert project_target(job) == job.path("project.RPP"), "our own file is fair game"
-    job.path("project.RPP").write_text(SAVED_BY_REAPER)
-    assert project_target(job) == job.path("project.new.RPP")
+    job = Job.create(tmp_path, title="Song", artist=None, source="/x.wav", hash="abcd1234")
+    assert project_target(job) == job.dir / "Song.RPP"
+    job.project_path.write_text(HEADER + "\n>\n")
+    assert project_target(job) == job.dir / "Song.RPP", "our own file is fair game"
+    job.project_path.write_text(SAVED_BY_REAPER)
+    assert project_target(job) == job.dir / "Song.new.RPP"
