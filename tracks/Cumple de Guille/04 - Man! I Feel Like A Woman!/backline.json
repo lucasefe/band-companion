@@ -32,14 +32,59 @@
   "timeline": {
     "count_in_bars": 2,
     "count_in_seconds": 3.84,
-    "song_starts_at": 3.64,
+    "song_starts_at": 2.6323,
     "bpm": 125.0,
     "meter": 4
+  },
+  "grid": {
+    "mode": "straight",
+    "bpm": 125.0,
+    "confident_beats": 443,
+    "residual_p95_ms": 12.2,
+    "residual_max_ms": 32.1,
+    "dropped": 0,
+    "inserted": 0,
+    "reason": null
+  },
+  "metronome": {
+    "mode": "gaps",
+    "gaps": [
+      {
+        "start": 2.88,
+        "end": 9.6,
+        "bars": 3.5,
+        "bar": 0
+      },
+      {
+        "start": 84.48,
+        "end": 90.24,
+        "bars": 3.0,
+        "bar": 43
+      },
+      {
+        "start": 147.84,
+        "end": 151.68,
+        "bars": 2.0,
+        "bar": 76
+      },
+      {
+        "start": 205.44,
+        "end": 211.2,
+        "bars": 3.0,
+        "bar": 106
+      },
+      {
+        "start": 234.24,
+        "end": 237.6,
+        "bars": 1.75,
+        "bar": 121
+      }
+    ]
   },
   "lyrics": {
     "source": "lrclib:37343272",
     "offset": 0.0,
     "on_vocal": 1.0
   },
-  "updated": "2026-10-20T13:38:34"
+  "updated": "2026-10-20T17:35:41"
 }

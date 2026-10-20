@@ -23,7 +23,7 @@
     }
   },
   "job": "/Users/lucasefe/Music/Backline/jobs/Juanes - Fotografia (4b74e33d)",
-  "project": "Fotografia.new.RPP",
+  "project": "Fotografia.RPP",
   "files": {
     "lyrics": "Fotografia.lrc",
     "reference": "Fotografia.reference.wav",
@@ -31,15 +31,48 @@
   },
   "timeline": {
     "count_in_bars": 2,
-    "count_in_seconds": 5.60028,
-    "song_starts_at": 4.50028,
-    "bpm": 85.71,
+    "count_in_seconds": 5.647059,
+    "song_starts_at": 4.565659,
+    "bpm": 85.0,
     "meter": 4
+  },
+  "grid": {
+    "mode": "straight",
+    "bpm": 85.0,
+    "confident_beats": 290,
+    "residual_p95_ms": 11.5,
+    "residual_max_ms": 17.5,
+    "dropped": 0,
+    "inserted": 0,
+    "reason": null
+  },
+  "metronome": {
+    "mode": "gaps",
+    "gaps": [
+      {
+        "start": 4.941,
+        "end": 16.941,
+        "bars": 4.25,
+        "bar": 0
+      },
+      {
+        "start": 175.055,
+        "end": 197.643,
+        "bars": 8.0,
+        "bar": 61
+      },
+      {
+        "start": 239.995,
+        "end": 249.171,
+        "bars": 3.25,
+        "bar": 84
+      }
+    ]
   },
   "lyrics": {
     "source": "lrclib:33616122",
     "offset": 0.8,
     "on_vocal": 1.0
   },
-  "updated": "2026-10-20T13:15:41"
+  "updated": "2026-10-20T17:35:40"
 }

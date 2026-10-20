@@ -32,14 +32,28 @@
   "timeline": {
     "count_in_bars": 2,
     "count_in_seconds": 4.320043,
-    "song_starts_at": 3.280043,
+    "song_starts_at": 3.282443,
     "bpm": 111.11,
     "meter": 4
+  },
+  "grid": {
+    "mode": "tracked",
+    "bpm": 111.11,
+    "confident_beats": 401,
+    "residual_p95_ms": 56.5,
+    "residual_max_ms": 99.1,
+    "dropped": 0,
+    "inserted": 0,
+    "reason": "straight fit too loose (p95 56 ms, max 99 ms)"
+  },
+  "metronome": {
+    "mode": "gaps",
+    "gaps": []
   },
   "lyrics": {
     "source": "lrclib:34463062",
     "offset": 0.0,
     "on_vocal": 0.915
   },
-  "updated": "2026-10-20T15:58:49"
+  "updated": "2026-10-20T17:35:40"
 }

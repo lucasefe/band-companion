@@ -1,29 +1,29 @@
 {
   "backline": "0.1.0",
-  "hash": "e183903b",
+  "hash": "a8c32225",
   "song": {
     "artist": "Alanis Morissette",
     "title": "Ironic"
   },
   "source": {
     "kind": "url",
-    "url": "https://www.youtube.com/watch?v=Jne9t8sHpUc",
+    "url": "https://www.youtube.com/watch?v=sWeyig97Gy8",
     "file": "source.webm",
     "meta": {
-      "id": "Jne9t8sHpUc",
-      "title": "Alanis Morissette - Ironic (Official 4K Music Video)",
+      "id": "sWeyig97Gy8",
+      "title": "Alanis Morissette - Ironic // Lyrics",
       "track": null,
       "artist": null,
       "album": null,
-      "channel": "Alanis Morissette",
-      "uploader": "Alanis Morissette",
-      "duration": 247,
-      "webpage_url": "https://www.youtube.com/watch?v=Jne9t8sHpUc",
-      "upload_date": "20070519"
+      "channel": "Millennial Pause",
+      "uploader": "Millennial Pause",
+      "duration": 229,
+      "webpage_url": "https://www.youtube.com/watch?v=sWeyig97Gy8",
+      "upload_date": "20240922"
     }
   },
-  "job": "/Users/lucasefe/Music/Backline/jobs/Alanis Morissette - Ironic (e183903b)",
-  "project": "Ironic.RPP",
+  "job": "/Users/lucasefe/Music/Backline/jobs/Alanis Morissette - Ironic (a8c32225)",
+  "project": "Ironic.new.RPP",
   "files": {
     "lyrics": "Ironic.lrc",
     "reference": "Ironic.reference.wav",
@@ -31,15 +31,42 @@
   },
   "timeline": {
     "count_in_bars": 2,
-    "count_in_seconds": 5.60028,
-    "song_starts_at": 4.52028,
-    "bpm": 85.71,
+    "count_in_seconds": 5.627198,
+    "song_starts_at": 5.106698,
+    "bpm": 85.3,
     "meter": 4
   },
+  "grid": {
+    "mode": "straight",
+    "bpm": 85.3,
+    "confident_beats": 189,
+    "residual_p95_ms": 13.5,
+    "residual_max_ms": 17.9,
+    "dropped": 0,
+    "inserted": 0,
+    "reason": null
+  },
+  "metronome": {
+    "mode": "gaps",
+    "gaps": [
+      {
+        "start": 5.627,
+        "end": 45.02,
+        "bars": 14.0,
+        "bar": 1
+      },
+      {
+        "start": 205.403,
+        "end": 234.244,
+        "bars": 10.25,
+        "bar": 72
+      }
+    ]
+  },
   "lyrics": {
-    "source": "lrclib:34482718",
-    "offset": 0.0,
+    "source": "lrclib:37299891",
+    "offset": 1.02,
     "on_vocal": 0.923
   },
-  "updated": "2026-10-20T15:59:45"
+  "updated": "2026-10-20T17:35:38"
 }
