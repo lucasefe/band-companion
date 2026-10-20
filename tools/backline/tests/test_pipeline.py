@@ -81,8 +81,8 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
         'NAME "loop (metronome)"' in tracks[1] and "VOLPAN 0.1412537545 -1 -1 -1 1" in tracks[1]
     ), "click hard left at -17 dB"
     assert 'FILE "work/metronome.wav"' in tracks[1]
-    assert 'NAME "loop (MIDI conservative)"' in tracks[3] and "VOLPAN 1 1 -1 -1 1" in tracks[3], (
-        "drums hard right"
+    assert 'NAME "loop (MIDI conservative)"' in tracks[3] and "VOLPAN 1 0 -1 -1 1" in tracks[3], (
+        "drums centred"
     )
     assert "MUTESOLO 1 0 0" in tracks[5], "original is muted so the render is click + drums only"
     record = json.loads((result.output_dir / "backline.json").read_text())

@@ -16,7 +16,7 @@ from backline.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and <title>.mid; other profiles get a suffix
 GRID_VERSION = 3  # bump when choose_grid() changes; the tempo stage is cached on it
-OUTPUT_FORMAT = 14  # bump when the output stage writes different files/content for the same inputs
+OUTPUT_FORMAT = 15  # bump when the output stage writes different files/content for the same inputs
 
 
 @dataclass
@@ -526,8 +526,8 @@ class _Runner:
                     volume_db=STEM_VOLUME_DB,
                     muted=True,
                 ),
-                # The render is the band's track: metronome hard left, MIDI drums hard right,
-                # so the two can be routed separately (click to in-ears, drums to the PA).
+                # The render is the band's track: MIDI drums in the centre, metronome hard left
+                # (the click can still be isolated by taking the left channel's difference).
                 metronome=AudioTrack(
                     name=f"{stem} (metronome)",
                     file=J.METRONOME,
@@ -541,7 +541,7 @@ class _Runner:
                         name=f"{stem} (MIDI {profile})",
                         item_name=f"{stem} {profile}",
                         seq=seq,
-                        pan=1.0,
+                        pan=0.0,
                         muted=profile != PRIMARY,
                         fx_chain=fx_chain,
                     )

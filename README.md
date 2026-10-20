@@ -21,14 +21,13 @@ Each song folder holds three files on **one timeline** — two bars of count-in,
 ```
 tracks/Cumple de Guille/02 - Fotografía/
 ├── Fotografia.lrc             lyrics; the count-in shows as a countdown, 1 2 3 4 · 1 2 3 4
-├── Fotografia.wav             L: metronome · R: the drums (your instrument, rendered from Reaper)
+├── Fotografia.wav             the drums (your instrument, rendered from Reaper) + metronome on the left
 ├── Fotografia.reference.wav   the original song, with the same count-in clicks
 └── backline.json              where it came from, tempo, count-in, lyrics source, metronome gaps
 ```
 
 The band plays to the drums. The **metronome** lives on the left channel of the same file: the
-count-in, then one plain click on every quarter note of the song. Left and right can be routed
-separately (click to in-ears, drums to the PA). The leader can bring the original in underneath
+count-in, then one plain click on every quarter note of the song. The leader can bring the original in underneath
 at any volume, or mute it, without anything going out of sync.
 
 ## Setup
@@ -117,13 +116,13 @@ what changed.
 |---|---|---|---|
 | `<Title> (metronome)` | count-in, then a click on every quarter note | **hard left** | on, −17 dB |
 | `<Title> (drums)` | the real drums (Demucs stem) | hard left | muted — unmute to compare |
-| `<Title> (MIDI conservative)` | the drums as MIDI | **hard right** | on, your VSTi loaded |
-| `<Title> (MIDI daring)` | same, more sensitive detection | hard right | muted, your VSTi loaded |
+| `<Title> (MIDI conservative)` | the drums as MIDI | centre | on, your VSTi loaded |
+| `<Title> (MIDI daring)` | same, more sensitive detection | centre | muted, your VSTi loaded |
 | `<Title> (original)` | the song | right | muted — the app mixes the reference in live |
 
 Every lyric line is a marker on the ruler. File → Render is pre-filled: the song folder,
-`<Title>.wav`, 24-bit 44.1 kHz, whole project — so the render is *L metronome / R drums*,
-count-in included. **Once Reaper has saved the project, Backline never writes to it again**; a
+`<Title>.wav`, 24-bit 44.1 kHz, whole project — so the render is the drums in the centre with
+the metronome on the left, count-in included. **Once Reaper has saved the project, Backline never writes to it again**; a
 regeneration goes to `<Title>.new.RPP` beside it.
 
 ### The metronome

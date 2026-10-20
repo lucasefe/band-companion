@@ -6,8 +6,9 @@ One repo, two halves, one contract between them:
   + R2. The leader phone plays into the console; followers see the lyrics live. No framework,
   no unit tests, no lint config; `scripts/browser-check.mjs` is the regression suite.
 - **Importer** (`tools/backline/`, Python 3.12, uv): `backline add <song>` → song folder.
-- **`tracks/<set>/<NN - Title>/`**: `Title.lrc`, `Title.wav` (L metronome / R drums, rendered by
-  the user in Reaper), `Title.reference.wav` (the original) — all on one timeline, count-in first.
+- **`tracks/<set>/<NN - Title>/`**: `Title.lrc`, `Title.wav` (drums centred + metronome hard left,
+  rendered by the user in Reaper), `Title.reference.wav` (the original) — all on one timeline,
+  count-in first.
 
 The name was Band Companion; the deployed worker (`wrangler.jsonc` `name`), the R2 bucket and
 the leader-key localStorage key keep that name on purpose (URL, uploaded audio, signed-in
@@ -105,8 +106,9 @@ src/backline/
                 and max ≤ 60 ms, else smooth() (local quadratic) of the tracked grid; --bpm forces
                 straight. Beat This! times sit on 10 ms frames, so ±10 ms residual is its noise
                 floor and the median interval is coarse (120.00 was really 117.68).
-  reaper.py     project (metronome hard L, stem muted L, MIDI hard R + FX template, daring muted R,
-                original muted), markers, RENDER_* settings; extract_fx_chain(); is_generated()
+  reaper.py     project (metronome hard L at -17 dB, stem muted L, MIDI centred + FX template,
+                daring muted, original muted), markers, RENDER_* settings; extract_fx_chain();
+                is_generated()
 tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop; tests pass an explicit
                 Config so nothing ever lands in the real tracks/
 ```
@@ -129,9 +131,8 @@ Rules:
   stays the raw detection; `GRID_VERSION` in the tempo stage params must be bumped when
   `choose_grid()` changes (the stage is cached on it). "Don't be creative" with the click: one
   sound, every quarter note, same level; the user asked for exactly that.
-- **The metronome is baked into the render on purpose** (project track hard left, MIDI drums hard
-  right): no third element to keep in sync in the player, and L/R can be routed separately. The
-  player plays `Title.wav` as-is.
+- **The metronome is baked into the render on purpose** (project track hard left, MIDI drums
+  centred): no third element to keep in sync in the player. The player plays `Title.wav` as-is.
 - **Song time vs output time.** `notes.json`, `beats.json`, `lyrics.json` are in song time; the
   output stage adds `Layout.shift`. The count-in ends exactly on the first downbeat.
 - **Lyrics never fail the run**: a miss is written to `lyrics.json` (`found: false`) and cached.
