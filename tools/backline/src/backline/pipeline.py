@@ -34,7 +34,7 @@ class RunOptions:
     bpm: float | None = None  # force a straight grid at this tempo
     count_in: int = 2
     count_in_note: int = 37
-    metronome: str = "always"  # always | gaps | off
+    metronome: str = "gaps"  # gaps | always | off
     metronome_min_bars: int = 1
     metronome_silence_db: float = -30.0
     metronome_volume_db: float = -17.0  # track level in the Reaper project

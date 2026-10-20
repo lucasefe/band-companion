@@ -27,7 +27,9 @@ tracks/Cumple de Guille/02 - Fotografía/
 ```
 
 The band plays to the drums. The **metronome** lives on the left channel of the same file: the
-count-in, then one plain click on every quarter note of the song. The leader can bring the original in underneath
+count-in, then a plain click on every quarter note **wherever the drums are not playing** —
+intros before they enter, breakdowns, stops — so you never lose the beat and never hear a click
+over the kit. The leader can bring the original in underneath
 at any volume, or mute it, without anything going out of sync.
 
 ## Setup
@@ -114,7 +116,7 @@ what changed.
 
 | Track | Content | Pan | State |
 |---|---|---|---|
-| `<Title> (metronome)` | count-in, then a click on every quarter note | **hard left** | on, −17 dB |
+| `<Title> (metronome)` | count-in, then clicks where the drums are silent | **hard left** | on, −17 dB |
 | `<Title> (drums)` | the real drums (Demucs stem) | hard left | muted — unmute to compare |
 | `<Title> (MIDI conservative)` | the drums as MIDI | centre | on, your VSTi loaded |
 | `<Title> (MIDI daring)` | same, more sensitive detection | centre | muted, your VSTi loaded |
@@ -139,9 +141,11 @@ smoothed tracked beats are used instead. `backline.json` reports it: `grid.mode`
 `--bpm 85.3` (force a straight grid at that tempo) or `--grid tracked`.
 
 The same grid sets the count-in, the MIDI tempo and the Reaper project tempo, so for a straight
-song Reaper's bar lines land on the song's bars. Metronome modes in `backline.toml`: `always`
-(default), `gaps` (only where the drum stem goes quiet for a bar or more), `off`;
-`backline resimplify <job> --metronome gaps` switches a song, then re-render.
+song Reaper's bar lines land on the song's bars. Where the click plays is decided from the drum
+stem: a run of a bar or more at least 30 dB below the song's usual drum level is a gap, widened
+to bar lines so the click starts on a 1. Modes in `backline.toml`: `gaps` (default), `always`
+(every beat), `off`; `backline resimplify <job> --metronome always` switches a song, then
+re-render. `backline.json` lists the gaps, e.g. `bar 2, 10 bars, 3.9–21.3 s`.
 
 *Conservative vs daring:* the conservative MIDI uses the transcriber's default thresholds and
 rarely invents hits but is shy on toms and cymbals; the daring one lowers the thresholds and
@@ -184,7 +188,7 @@ bars = 2
 note = 37
 
 [metronome]
-mode = "always"          # always | gaps | off
+mode = "gaps"            # gaps | always | off
 volume_db = -17          # track level in the project
 min_gap_bars = 1
 silence_db = -30

@@ -16,7 +16,7 @@ def _config(tmp_path: Path, tracks: Path | None = None, default_set: str | None 
         default_set=default_set,
         count_in_bars=2,
         count_in_note=37,
-        metronome="always",
+        metronome="gaps",
         metronome_min_bars=1,
         metronome_silence_db=-30.0,
         metronome_volume_db=-17.0,
@@ -86,7 +86,7 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
     )
     assert "MUTESOLO 1 0 0" in tracks[5], "original is muted so the render is click + drums only"
     record = json.loads((result.output_dir / "backline.json").read_text())
-    assert record["metronome"]["mode"] == "always"
+    assert record["metronome"]["mode"] == "gaps"
     assert isinstance(record["metronome"]["gaps"], list)
 
     again = run(str(loop_wav), opts, config=cfg)

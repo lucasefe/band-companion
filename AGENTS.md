@@ -96,8 +96,9 @@ src/backline/
   lyrics.py / lrclib.py   identification, LRCLIB lookup + ranking, vocal-stem offset check, LRC I/O
   midi_out.py   CountIn, TempoMap, Layout, build_sequence() → Sequence; write_midi()
   reference.py  original + synthesized count-in clicks on the output timeline, 16-bit
-  metronome.py  write_metronome(): one plain click per quarter note on the regularized grid
-                (modes always/gaps/off) → work/metronome.wav, mono; detect_gaps() for gaps mode
+  metronome.py  write_metronome(): one plain click per quarter note of the grid, in gaps mode
+                (default) only where detect_gaps() finds the drum stem quiet for ≥ 1 bar (snapped
+                to bar lines), plus the count-in → work/metronome.wav, mono; modes gaps/always/off
   tempo.py      Beat This! (raw → work/beats.json) and the grid (work/grid.json, what everything
                 downstream uses): regularize() (quarter note within 60–170 bpm, drop double-time
                 extras in phase, fill ≥1.7× gaps, keep slow-downs; downbeats that imply an absurd

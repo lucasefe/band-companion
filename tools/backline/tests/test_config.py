@@ -34,7 +34,7 @@ def test_defaults_without_a_file():
         default_set=None,
         count_in_bars=2,
         count_in_note=37,
-        metronome="always",
+        metronome="gaps",
         metronome_min_bars=1,
         metronome_silence_db=-30.0,
         metronome_volume_db=-17.0,

@@ -20,7 +20,7 @@ class Config:
     default_set: str | None
     count_in_bars: int
     count_in_note: int
-    metronome: str  # always | gaps | off
+    metronome: str  # gaps | always | off
     metronome_min_bars: int
     metronome_silence_db: float
     metronome_volume_db: float
@@ -51,7 +51,7 @@ def load_config(path: Path | None = None) -> Config:
         default_set=data.get("tracks", {}).get("default_set"),
         count_in_bars=int(count_in.get("bars", 2)),
         count_in_note=int(count_in.get("note", 37)),
-        metronome=str(metronome.get("mode", "always")),
+        metronome=str(metronome.get("mode", "gaps")),
         metronome_min_bars=int(metronome.get("min_gap_bars", 1)),
         metronome_silence_db=float(metronome.get("silence_db", -30)),
         metronome_volume_db=float(metronome.get("volume_db", -17)),
