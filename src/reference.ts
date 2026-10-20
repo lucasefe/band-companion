@@ -16,9 +16,13 @@ export interface ReferenceState {
 
 const STORAGE_KEY = 'backline:reference'
 const DEFAULT_VOLUME = 0.3
-// Correct the reference when it is this far from the main track. Two local elements
-// drift by a few ms; seeks and buffering are what this catches.
-const DRIFT = 0.05
+// Keeping two elements together without stutter: a seek interrupts the audio and makes the
+// element re-buffer, so it is reserved for large gaps (and the leader's own seeks). Small gaps
+// are closed by running the reference a few percent faster or slower, which is inaudible.
+const SEEK_DRIFT = 0.25 // seconds; beyond this, jump
+const NUDGE_DRIFT = 0.015 // seconds; below this, leave it alone
+const MAX_NUDGE = 0.04 // ±4 % playback rate
+const SEEK_COOLDOWN = 1500 // ms; never jump twice in a row while the first one is still settling
 
 interface Stored {
   enabled: boolean
@@ -37,6 +41,10 @@ export class Reference {
   private track: Track | null = null
   private enabled: boolean
   private state: ReferenceState
+  private lastJumpAt = 0
+  // How far behind the reference lands after a jump (seek latency), learned so the next jump
+  // aims ahead by that much.
+  private jumpLag = 0
 
   constructor(audio: HTMLAudioElement, main: HTMLAudioElement) {
     this.audio = audio
@@ -137,30 +145,49 @@ export class Reference {
 
   private onMainPlay = (): void => {
     if (!this.active()) return
-    this.align()
+    this.jump()
     this.play()
   }
 
   private onMainPause = (): void => {
     if (!this.audio.paused) this.audio.pause()
+    this.audio.playbackRate = 1
   }
 
+  // The leader seeked on purpose: follow immediately, a glitch is expected here.
   private resync = (): void => {
     if (!this.active()) return
-    this.align()
+    this.jump()
   }
 
   private onMainTime = (): void => {
-    if (!this.active() || this.main.paused || this.audio.paused) return
-    if (Math.abs(this.audio.currentTime - this.main.currentTime) > DRIFT) this.align()
+    if (!this.active() || this.main.paused || this.audio.paused || this.audio.seeking) return
+    const behind = this.main.currentTime - this.audio.currentTime // > 0: reference is late
+    const now = performance.now()
+    if (now - this.lastJumpAt < SEEK_COOLDOWN) {
+      // First reading after a jump: remember how far behind the seek left us.
+      if (behind > 0 && behind < SEEK_DRIFT) this.jumpLag = Math.min(0.5, 0.5 * this.jumpLag + 0.5 * behind)
+      return
+    }
+    if (Math.abs(behind) > SEEK_DRIFT) {
+      this.jump()
+      return
+    }
+    if (Math.abs(behind) > NUDGE_DRIFT) {
+      this.audio.playbackRate = 1 + Math.sign(behind) * Math.min(MAX_NUDGE, Math.abs(behind))
+    } else if (this.audio.playbackRate !== 1) {
+      this.audio.playbackRate = 1
+    }
   }
 
   private active(): boolean {
     return this.enabled && this.track?.reference !== null && this.track !== null && this.audio.getAttribute('src') !== null
   }
 
-  private align(): void {
-    this.audio.currentTime = this.main.currentTime
+  private jump(): void {
+    this.audio.playbackRate = 1
+    this.audio.currentTime = this.main.currentTime + (this.main.paused ? 0 : this.jumpLag)
+    this.lastJumpAt = performance.now()
   }
 
   private play(): void {
