@@ -52,5 +52,21 @@
         "local"
       ]
     }
+  },
+  "Cumple de Guille/04 - Man! I Feel Like A Woman!": {
+    "key": "2bf5fe918c4106e8.wav",
+    "bytes": 63131898,
+    "source": "Man! I Feel Like A Woman!.wav",
+    "uploaded": [
+      "remote"
+    ],
+    "reference": {
+      "key": "092f1915b0f66d8c.wav",
+      "bytes": 42087516,
+      "source": "Man! I Feel Like A Woman!.reference.wav",
+      "uploaded": [
+        "remote"
+      ]
+    }
   }
 }
