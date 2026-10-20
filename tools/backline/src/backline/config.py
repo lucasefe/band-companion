@@ -23,6 +23,7 @@ class Config:
     metronome: str  # always | gaps | off
     metronome_min_bars: int
     metronome_silence_db: float
+    metronome_volume_db: float
 
 
 def find_config(start: Path | None = None) -> Path | None:
@@ -53,6 +54,7 @@ def load_config(path: Path | None = None) -> Config:
         metronome=str(metronome.get("mode", "always")),
         metronome_min_bars=int(metronome.get("min_gap_bars", 1)),
         metronome_silence_db=float(metronome.get("silence_db", -30)),
+        metronome_volume_db=float(metronome.get("volume_db", -17)),
     )
 
 

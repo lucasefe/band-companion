@@ -16,7 +16,7 @@ from backline.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and <title>.mid; other profiles get a suffix
 GRID_VERSION = 3  # bump when choose_grid() changes; the tempo stage is cached on it
-OUTPUT_FORMAT = 13  # bump when the output stage writes different files/content for the same inputs
+OUTPUT_FORMAT = 14  # bump when the output stage writes different files/content for the same inputs
 
 
 @dataclass
@@ -37,6 +37,7 @@ class RunOptions:
     metronome: str = "always"  # always | gaps | off
     metronome_min_bars: int = 1
     metronome_silence_db: float = -30.0
+    metronome_volume_db: float = -17.0  # track level in the Reaper project
     keep_other: bool = False
     force: bool = False
     # lyrics
@@ -471,7 +472,12 @@ class _Runner:
             "tempo": "constant",
             "format": OUTPUT_FORMAT,
             "output_dir": str(out_dir),
-            "metronome": [opts.metronome, opts.metronome_min_bars, opts.metronome_silence_db],
+            "metronome": [
+                opts.metronome,
+                opts.metronome_min_bars,
+                opts.metronome_silence_db,
+                opts.metronome_volume_db,
+            ],
         }
         fx_chain = load_fx_template()
         gaps = (
@@ -528,6 +534,7 @@ class _Runner:
                     duration=layout.shift + duration,
                     position=0.0,
                     pan=-1.0,
+                    volume_db=opts.metronome_volume_db,
                 ),
                 midi=[
                     MidiTrack(

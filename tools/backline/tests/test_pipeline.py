@@ -19,6 +19,7 @@ def _config(tmp_path: Path, tracks: Path | None = None, default_set: str | None 
         metronome="always",
         metronome_min_bars=1,
         metronome_silence_db=-30.0,
+        metronome_volume_db=-17.0,
     )
 
 
@@ -76,9 +77,9 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
     assert 'FILE "work/drums.wav"' in rpp and 'FILE "input/original.wav"' in rpp
     assert f'RENDER_FILE "{job.dir / "output"}"' in rpp and 'RENDER_PATTERN "loop"' in rpp
     tracks = rpp.split("<TRACK")
-    assert 'NAME "loop (metronome)"' in tracks[1] and "VOLPAN 1 -1 -1 -1 1" in tracks[1], (
-        "click hard left"
-    )
+    assert (
+        'NAME "loop (metronome)"' in tracks[1] and "VOLPAN 0.1412537545 -1 -1 -1 1" in tracks[1]
+    ), "click hard left at -17 dB"
     assert 'FILE "work/metronome.wav"' in tracks[1]
     assert 'NAME "loop (MIDI conservative)"' in tracks[3] and "VOLPAN 1 1 -1 -1 1" in tracks[3], (
         "drums hard right"

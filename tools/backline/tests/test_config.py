@@ -37,6 +37,7 @@ def test_defaults_without_a_file():
         metronome="always",
         metronome_min_bars=1,
         metronome_silence_db=-30.0,
+        metronome_volume_db=-17.0,
     )
     assert cfg.tracks is None
 

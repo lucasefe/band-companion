@@ -124,6 +124,7 @@ def add(
         metronome=metronome or cfg.metronome,
         metronome_min_bars=cfg.metronome_min_bars,
         metronome_silence_db=cfg.metronome_silence_db,
+        metronome_volume_db=cfg.metronome_volume_db,
         keep_other=keep_other,
         force=force,
         lyrics=lyrics,

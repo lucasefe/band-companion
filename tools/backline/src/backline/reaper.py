@@ -16,6 +16,7 @@ HEADER = f'<REAPER_PROJECT 0.1 "7.0/{GENERATOR_TAG}" 0'
 STEM_VOLUME_DB = -9.0
 ORIGINAL_VOLUME_DB = -16.0
 ORIGINAL_PAN = 0.6
+METRONOME_VOLUME_DB = -17.0  # against a drum VSTi at 0 dB; what the user settled on
 
 # Reaper's render-format blob for 24-bit WAV ("evaw" + 0x18 + 0x00 0x01).
 RENDER_CFG_WAV24 = "ZXZhdxgAAQ=="

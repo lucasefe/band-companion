@@ -115,7 +115,7 @@ what changed.
 
 | Track | Content | Pan | State |
 |---|---|---|---|
-| `<Title> (metronome)` | count-in, then a click on every quarter note | **hard left** | on |
+| `<Title> (metronome)` | count-in, then a click on every quarter note | **hard left** | on, −17 dB |
 | `<Title> (drums)` | the real drums (Demucs stem) | hard left | muted — unmute to compare |
 | `<Title> (MIDI conservative)` | the drums as MIDI | **hard right** | on, your VSTi loaded |
 | `<Title> (MIDI daring)` | same, more sensitive detection | hard right | muted, your VSTi loaded |
@@ -186,6 +186,7 @@ note = 37
 
 [metronome]
 mode = "always"          # always | gaps | off
+volume_db = -17          # track level in the project
 min_gap_bars = 1
 silence_db = -30
 ```
