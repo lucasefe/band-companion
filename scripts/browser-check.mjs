@@ -74,6 +74,37 @@ check('bar back to live', await leader.evaluate('!document.querySelector(".seek"
 await leader.evaluate('document.getElementById("audio").currentTime = 52')
 await sleep(300)
 
+// --- Reference track (the original song under the drums), leader only ---------
+check('no reference row for a song without one', await leader.evaluate('document.querySelector(".reference-row").hidden'))
+await leader.evaluate('document.querySelector(".songs-back").click()')
+await leader.evaluate('[...document.querySelectorAll(".song")].find((b) => b.textContent.normalize("NFC").includes("Fotografía")).click()')
+check('reference row shown for Fotografía', await leader.waitFor('!document.querySelector(".reference-row").hidden', 3000))
+check('reference starts off', await leader.evaluate('document.querySelector(".chip-reference").textContent === "Reference off" && document.getElementById("reference").getAttribute("src") === null'))
+await leader.evaluate('document.querySelector(".transport-play").click()')
+check('drums playing', await leader.waitFor('document.getElementById("audio").currentTime > 1', 10000))
+await leader.evaluate('document.querySelector(".chip-reference").click()')
+check('reference on', await leader.waitFor('document.querySelector(".chip-reference").textContent === "Reference"', 5000), await leader.evaluate('document.querySelector(".chip-reference").textContent'))
+check('reference plays in lockstep', await leader.waitFor('(() => { const a = document.getElementById("audio"), r = document.getElementById("reference"); return !r.paused && r.currentTime > 0.5 && Math.abs(a.currentTime - r.currentTime) < 0.2 })()', 8000), await leader.evaluate('`main=${document.getElementById("audio").currentTime.toFixed(2)} ref=${document.getElementById("reference").currentTime.toFixed(2)}`'))
+await leader.evaluate('document.getElementById("audio").currentTime = 40')
+check('reference follows a seek', await leader.waitFor('Math.abs(document.getElementById("audio").currentTime - document.getElementById("reference").currentTime) < 0.2 && document.getElementById("reference").currentTime > 39', 5000), await leader.evaluate('`main=${document.getElementById("audio").currentTime.toFixed(2)} ref=${document.getElementById("reference").currentTime.toFixed(2)}`'))
+await leader.evaluate('(() => { const v = document.querySelector(".reference-volume"); v.value = "80"; v.dispatchEvent(new Event("input", { bubbles: true })) })()')
+check('volume persisted', await leader.waitFor('JSON.parse(localStorage.getItem("backline:reference")).volume === 0.8', 2000))
+await leader.evaluate('document.querySelector(".reference-mute").click()')
+check('mute toggles', await leader.waitFor('document.querySelector(".reference-mute").textContent === "Unmute" && document.querySelector(".reference-mute").getAttribute("aria-pressed") === "true"', 2000))
+check('muted reference keeps running in sync', await leader.evaluate('!document.getElementById("reference").paused'))
+await leader.evaluate('document.querySelector(".reference-mute").click()')
+await shot(leader, 'phone-reference')
+await leader.evaluate('document.querySelector(".transport-pause").click()')
+check('reference pauses with the drums', await leader.waitFor('document.getElementById("reference").paused', 2000))
+await leader.evaluate('document.querySelector(".chip-reference").click()')
+check('reference off again', await leader.waitFor('document.querySelector(".chip-reference").textContent === "Reference off"', 2000))
+// back to the first song, playing, for the follower checks below
+await leader.evaluate('document.querySelector(".songs-back").click()')
+await leader.evaluate('[...document.querySelectorAll(".song")].find((b) => b.textContent.normalize("NFC").includes("No podrás")).click()')
+await leader.evaluate('document.querySelector(".transport-play").click()')
+await leader.evaluate('document.getElementById("audio").currentTime = 52')
+await sleep(600)
+
 // --- Follower on a second device --------------------------------------------
 
 const follower = await chrome.newPage()

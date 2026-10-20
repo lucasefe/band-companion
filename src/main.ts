@@ -4,6 +4,7 @@ import { FollowUI } from './follow-ui'
 import { Monitor } from './monitor'
 import { cachedTrackIds, downloadTracks, offlineSupported, storageUsage } from './offline'
 import { Player } from './player'
+import { Reference } from './reference'
 import { leaderKey, setLeaderKey } from './role'
 import { Broadcaster, Follower } from './sync'
 import { allTracks, loadSets } from './tracks'
@@ -13,10 +14,13 @@ import { keepAwake, subscribeWakeLock } from './wakelock'
 const root = document.getElementById('app')!
 const audioEl = document.getElementById('audio') as HTMLAudioElement
 const monitorEl = document.getElementById('monitor') as HTMLAudioElement
+const referenceEl = document.getElementById('reference') as HTMLAudioElement
 
 const sets = loadSets()
 const tracks = allTracks(sets)
 const player = new Player(audioEl)
+// Created once: a MediaElementSource can only ever be attached to an element once.
+const reference = new Reference(referenceEl, audioEl)
 
 let updateSW: ((reload?: boolean) => Promise<void>) | null = null
 let updateAvailable = false
@@ -76,6 +80,16 @@ function mountLeader(key: string): Mounted {
       setLeaderKey(null)
       mount()
     },
+    onReference() {
+      keepAwake()
+      reference.toggle()
+    },
+    onReferenceMute(muted) {
+      reference.setMuted(muted)
+    },
+    onReferenceVolume(volume) {
+      reference.setVolume(volume)
+    },
     getTime() {
       return audioEl.currentTime
     },
@@ -104,8 +118,10 @@ function mountLeader(key: string): Mounted {
   player.attachMediaSession()
   const unsubscribePlayer = player.subscribe((state) => {
     ui.updatePlayer(state)
+    reference.setTrack(state.status === 'idle' ? null : state.track)
     broadcaster.sync()
   })
+  const unsubscribeReference = reference.subscribe((state) => ui.updateReference(state))
   const unsubscribeWake = subscribeWakeLock((status) => ui.updateWake(status))
 
   async function refreshOfflineStatus(): Promise<void> {
@@ -124,7 +140,12 @@ function mountLeader(key: string): Mounted {
     if (downloading) return
     downloading = true
     try {
-      await downloadTracks(tracks, (progress) => ui.updateOffline({ kind: 'downloading', progress }))
+      await downloadTracks(
+        tracks,
+        (progress) => ui.updateOffline({ kind: 'downloading', progress }),
+        undefined,
+        reference.isEnabled(),
+      )
       await refreshOfflineStatus()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Download failed'
@@ -141,8 +162,10 @@ function mountLeader(key: string): Mounted {
     showNotice: (text) => ui.showNotice(text),
     destroy() {
       player.pause()
+      reference.setTrack(null)
       broadcaster.close()
       unsubscribePlayer()
+      unsubscribeReference()
       unsubscribeWake()
       ui.destroy()
     },

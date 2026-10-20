@@ -4,7 +4,8 @@
     "bytes": 42853642,
     "source": "NoPodras.wav",
     "uploaded": [
-      "remote"
+      "remote",
+      "local"
     ]
   },
   "Cumple de Guille/02 - Fotografía": {
@@ -12,7 +13,17 @@
     "bytes": 65838636,
     "source": "Fotografia.wav",
     "uploaded": [
-      "remote"
-    ]
+      "remote",
+      "local"
+    ],
+    "reference": {
+      "key": "7405743f0b4e9ffe.wav",
+      "bytes": 43892008,
+      "source": "Fotografia.reference.wav",
+      "uploaded": [
+        "remote",
+        "local"
+      ]
+    }
   }
 }

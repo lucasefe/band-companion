@@ -45,28 +45,45 @@ let uploaded = 0
 let skipped = 0
 let failed = 0
 
+// A song folder holds the track the band plays along to (`<Title>.wav`) and, optionally,
+// the original song as `<Title>.reference.wav` for the leader to mix in.
+const folders = new Map()
 for (const source of sources) {
   const folder = relative(ROOT, dirname(source)).normalize('NFC')
-  if (folder in manifest) {
-    console.error(`  more than one audio file in ${folder}; using ${basename(manifest[folder].source)}`)
+  const role = basename(source).toLowerCase().endsWith('.reference.wav') ? 'reference' : 'main'
+  const roles = folders.get(folder) ?? {}
+  if (roles[role]) {
+    console.error(`  more than one ${role} audio file in ${folder}; using ${basename(roles[role])}`)
     continue
   }
+  roles[role] = source
+  folders.set(folder, roles)
+}
 
+for (const [folder, roles] of folders) {
+  if (!roles.main) {
+    console.error(`  ${folder} has a reference but no main audio file; skipped`)
+    continue
+  }
+  const entry = await sync(folder, roles.main, previous[folder])
+  if (roles.reference) entry.reference = await sync(`${folder} (reference)`, roles.reference, previous[folder]?.reference)
+  manifest[folder] = entry
+}
+
+async function sync(label, source, before) {
   const hash = await hashFile(source)
   const key = `${hash}.wav`
   const bytes = statSync(source).size
-  const before = previous[folder]
   const alreadyUploaded = before?.key === key && before.uploaded?.includes(target)
   const entry = { key, bytes, source: basename(source), uploaded: before?.key === key ? (before.uploaded ?? []) : [] }
-  manifest[folder] = entry
 
   if (alreadyUploaded) {
-    console.log(`  skip  ${folder}`)
+    console.log(`  skip  ${label}`)
     skipped += 1
-    continue
+    return entry
   }
 
-  process.stdout.write(`  put   ${folder} (${(bytes / (1024 * 1024)).toFixed(1)} MB) ... `)
+  process.stdout.write(`  put   ${label} (${(bytes / (1024 * 1024)).toFixed(1)} MB) ... `)
   const result = spawnSync(
     'npx',
     ['wrangler', 'r2', 'object', 'put', `${BUCKET}/${key}`, '--file', source, '--content-type', 'audio/wav', `--${target}`],
@@ -81,6 +98,7 @@ for (const source of sources) {
     console.error(result.stderr.toString().trim())
     failed += 1
   }
+  return entry
 }
 
 const sorted = Object.fromEntries(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b)))

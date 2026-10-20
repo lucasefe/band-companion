@@ -23,35 +23,44 @@ export async function cachedTrackIds(tracks: Track[]): Promise<Set<string>> {
   return ids
 }
 
+// `withReferences`: also store each track's reference (the original song), which the leader
+// mixes in when it has the reference turned on. It doubles the data, so it is opt-in.
 export async function downloadTracks(
   tracks: Track[],
   onProgress: (progress: OfflineProgress) => void,
   signal?: AbortSignal,
+  withReferences = false,
 ): Promise<void> {
   const cache = await caches.open(TRACK_CACHE)
-  const wanted = new Set(tracks.map((t) => new URL(t.url, location.href).href))
+  const files: { url: string; track: Track }[] = []
+  for (const track of tracks) {
+    files.push({ url: track.url, track })
+    if (withReferences && track.reference) files.push({ url: track.reference.url, track })
+  }
+  const wanted = new Set(files.map((f) => new URL(f.url, location.href).href))
 
-  // Drop entries for tracks that no longer exist (renamed, re-encoded, removed).
+  // Drop entries for tracks that no longer exist (renamed, re-encoded, removed) and
+  // references that are no longer wanted.
   for (const req of await cache.keys()) {
     if (!wanted.has(req.url)) await cache.delete(req)
   }
 
-  const missing: Track[] = []
-  for (const track of tracks) {
-    if (!(await cache.match(track.url))) missing.push(track)
+  const missing: typeof files = []
+  for (const file of files) {
+    if (!(await cache.match(file.url))) missing.push(file)
   }
 
-  let done = tracks.length - missing.length
-  onProgress({ done, total: tracks.length, current: null })
+  let done = files.length - missing.length
+  onProgress({ done, total: files.length, current: null })
 
-  for (const track of missing) {
+  for (const { url, track } of missing) {
     signal?.throwIfAborted()
-    onProgress({ done, total: tracks.length, current: track })
-    const res = await fetch(track.url, { signal, cache: 'no-store' })
+    onProgress({ done, total: files.length, current: track })
+    const res = await fetch(url, { signal, cache: 'no-store' })
     if (!res.ok) throw new Error(`Failed to download “${track.title}” (${res.status})`)
-    await cache.put(track.url, res)
+    await cache.put(url, res)
     done += 1
-    onProgress({ done, total: tracks.length, current: null })
+    onProgress({ done, total: files.length, current: null })
   }
 
   if (navigator.storage?.persist) {
