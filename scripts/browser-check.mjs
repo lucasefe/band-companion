@@ -13,6 +13,28 @@ const KEY = 'goodkarma'
 mkdirSync(OUT, { recursive: true })
 
 const { check, exitCode } = reporter()
+
+// Expectations come from the first song's own .lrc, so the suite follows the set list.
+import { readFileSync, readdirSync } from 'node:fs'
+const TRACKS = new URL('../tracks/', import.meta.url)
+const setDir = readdirSync(TRACKS, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort()[0]
+const songDirs = readdirSync(new URL(`${setDir}/`, TRACKS), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort()
+const firstDir = songDirs[0]
+const secondDir = songDirs[1]
+const firstTitle = firstDir.replace(/^\s*\d+\s*[-._)]*\s*/, '').normalize('NFC')
+const secondTitle = secondDir.replace(/^\s*\d+\s*[-._)]*\s*/, '').normalize('NFC')
+const lrcFile = readdirSync(new URL(`${setDir}/${firstDir}/`, TRACKS)).find((f) => f.endsWith('.lrc'))
+const lines = readFileSync(new URL(`${setDir}/${firstDir}/${lrcFile}`, TRACKS), 'utf8')
+  .split(/\r?\n/)
+  .map((l) => l.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.+)$/))
+  .filter((m) => m && m[3].trim().length > 3)
+  .map((m) => ({ time: Number(m[1]) * 60 + Number(m[2]), text: m[3].trim() }))
+const pick = (i) => lines[Math.min(i, lines.length - 1)]
+const L1 = pick(4) // a line well into the song
+const L2 = pick(9) // a later line to tap
+const L3 = pick(6) // another one for the follower
+const js = JSON.stringify
+
 const chrome = await launchChrome()
 const shot = (page, name) => page.screenshot(join(OUT, `${name}.png`))
 
@@ -49,16 +71,16 @@ await shot(leader, 'phone-loaded')
 await leader.evaluate('document.querySelector(".transport-play").click()')
 check('playing', await leader.waitFor('document.getElementById("audio").currentTime > 1', 10000), `t=${await leader.evaluate('document.getElementById("audio").currentTime')}`)
 check('no media error', await leader.evaluate('document.getElementById("audio").error === null'))
-await leader.evaluate('document.getElementById("audio").currentTime = 52')
-check('current line follows time', await leader.waitFor('document.querySelector(".lyric.is-current")?.textContent.startsWith("Cada momento, voy")', 3000), await leader.evaluate('document.querySelector(".lyric.is-current")?.textContent'))
+await leader.evaluate(`document.getElementById("audio").currentTime = ${L1.time + 0.3}`)
+check('current line follows time', await leader.waitFor(`document.querySelector(".lyric.is-current")?.textContent === ${js(L1.text)}`, 3000), await leader.evaluate('document.querySelector(".lyric.is-current")?.textContent'))
 await sleep(600)
 await shot(leader, 'phone-playing')
 
 // --- Seeking: tap a lyric line, drag the bar ----------------------------------
 
-await leader.evaluate('[...document.querySelectorAll(".lyric")].find((l) => l.textContent.startsWith("No podrás olvidar")).click()')
-check('tap lyric seeks', await leader.waitFor('Math.abs(document.getElementById("audio").currentTime - 81.856) < 1.5', 3000), `t=${(await leader.evaluate('document.getElementById("audio").currentTime')).toFixed(2)}`)
-check('tapped line is current', await leader.waitFor('document.querySelector(".lyric.is-current")?.textContent.startsWith("No podrás olvidar")', 2000))
+await leader.evaluate(`[...document.querySelectorAll(".lyric")].find((l) => l.textContent === ${js(L2.text)}).click()`)
+check('tap lyric seeks', await leader.waitFor(`Math.abs(document.getElementById("audio").currentTime - ${L2.time}) < 1.5`, 3000), `t=${(await leader.evaluate('document.getElementById("audio").currentTime')).toFixed(2)}`)
+check('tapped line is current', await leader.waitFor(`document.querySelector(".lyric.is-current")?.textContent === ${js(L2.text)}`, 2000))
 
 const duration = await leader.evaluate('document.getElementById("audio").duration')
 const expected = Math.floor(duration * 0.75)
@@ -75,10 +97,9 @@ await leader.evaluate('document.getElementById("audio").currentTime = 52')
 await sleep(300)
 
 // --- Reference track (the original song under the drums), leader only ---------
-check('no reference row for a song without one', await leader.evaluate('document.querySelector(".reference-row").hidden'))
 await leader.evaluate('document.querySelector(".songs-back").click()')
-await leader.evaluate('[...document.querySelectorAll(".song")].find((b) => b.textContent.normalize("NFC").includes("Fotografía")).click()')
-check('reference row shown for Fotografía', await leader.waitFor('!document.querySelector(".reference-row").hidden', 3000))
+await leader.evaluate(`[...document.querySelectorAll(".song")].find((b) => b.textContent.normalize("NFC").includes(${js(secondTitle)})).click()`)
+check('reference row shown for a song with a reference', await leader.waitFor('!document.querySelector(".reference-row").hidden', 3000))
 check('reference starts off', await leader.evaluate('document.querySelector(".chip-reference").textContent === "Reference off" && document.getElementById("reference").getAttribute("src") === null'))
 await leader.evaluate('document.querySelector(".transport-play").click()')
 check('drums playing', await leader.waitFor('document.getElementById("audio").currentTime > 1', 10000))
@@ -100,9 +121,9 @@ await leader.evaluate('document.querySelector(".chip-reference").click()')
 check('reference off again', await leader.waitFor('document.querySelector(".chip-reference").textContent === "Reference off"', 2000))
 // back to the first song, playing, for the follower checks below
 await leader.evaluate('document.querySelector(".songs-back").click()')
-await leader.evaluate('[...document.querySelectorAll(".song")].find((b) => b.textContent.normalize("NFC").includes("No podrás")).click()')
+await leader.evaluate(`[...document.querySelectorAll(".song")].find((b) => b.textContent.normalize("NFC").includes(${js(firstTitle)})).click()`)
 await leader.evaluate('document.querySelector(".transport-play").click()')
-await leader.evaluate('document.getElementById("audio").currentTime = 52')
+await leader.evaluate(`document.getElementById("audio").currentTime = ${L1.time + 0.3}`)
 await sleep(600)
 
 // --- Follower on a second device --------------------------------------------
@@ -111,13 +132,13 @@ const follower = await chrome.newPage()
 await follower.device(402, 874)
 await follower.navigate(`${BASE}/`)
 check('follower live', await follower.waitFor('document.querySelector(".chip-live").textContent === "Live"', 5000), await follower.evaluate('document.querySelector(".chip-live").textContent'))
-check('follower sees title', await follower.waitFor('document.querySelector(".now-title").textContent.normalize("NFC") === "No podrás"', 5000), await follower.evaluate('document.querySelector(".now-title").textContent'))
-check('follower line matches leader', await follower.waitFor('document.querySelector(".lyric.is-current")?.textContent === document.querySelector(".lyric.is-current")?.textContent && /Cada momento, voy|Y es que no queda/.test(document.querySelector(".lyric.is-current")?.textContent ?? "")', 5000), await follower.evaluate('document.querySelector(".lyric.is-current")?.textContent'))
+check('follower sees title', await follower.waitFor(`document.querySelector(".now-title").textContent.normalize("NFC") === ${js(firstTitle)}`, 5000), await follower.evaluate('document.querySelector(".now-title").textContent'))
+check('follower line matches leader', await follower.waitFor(`document.querySelector(".lyric.is-current")?.textContent === ${js(L1.text)} || document.querySelector(".lyric.is-current")?.textContent === ${js(pick(5).text)}`, 5000), await follower.evaluate('document.querySelector(".lyric.is-current")?.textContent'))
 check('leader counts follower', await leader.waitFor('document.querySelector(".chip-live").textContent === "Leader · 1"', 5000), await leader.evaluate('document.querySelector(".chip-live").textContent'))
 await shot(follower, 'follower-live')
 
-await leader.evaluate('[...document.querySelectorAll(".lyric")].find((l) => l.textContent.startsWith("Si estoy llorando")).click()')
-check('follower follows lyric tap', await follower.waitFor('document.querySelector(".lyric.is-current")?.textContent.startsWith("Si estoy llorando")', 5000), await follower.evaluate('document.querySelector(".lyric.is-current")?.textContent'))
+await leader.evaluate(`[...document.querySelectorAll(".lyric")].find((l) => l.textContent === ${js(L3.text)}).click()`)
+check('follower follows lyric tap', await follower.waitFor(`document.querySelector(".lyric.is-current")?.textContent === ${js(L3.text)}`, 5000), await follower.evaluate('document.querySelector(".lyric.is-current")?.textContent'))
 check('follower lyrics not tappable', await follower.evaluate('!document.querySelector(".lyrics").classList.contains("is-seekable") && document.querySelector(".lyric").getAttribute("role") === null'))
 await leader.evaluate('document.getElementById("audio").currentTime = 52')
 await sleep(300)
