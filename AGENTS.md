@@ -149,3 +149,6 @@ project; player reference track with live volume/mute; offline includes referenc
 Open (see `docs/PLAN.md`): per-beat tempo map, quantized `essence`/`detailed` styles,
 `--bpm`/`--downbeat-offset`, Whisper fallback for lyrics, `--json` progress, followers hearing
 the reference, a `--render` flag driving Reaper's command-line renderer.
+Player, next: read `backline.json` in `tracks.ts` (glob it like the `.lrc` files) and show
+artist + title in the song list and the now-playing detail, plus a link to the source
+(YouTube) that opens outside the standalone app (`target=_blank`, `rel=noopener`).
