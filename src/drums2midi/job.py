@@ -15,9 +15,10 @@ MANIFEST = "manifest.json"
 # and the manifest says it ran with the same parameters.
 ARTIFACTS: dict[str, tuple[str, ...]] = {
     "ingest": ("original.wav",),
-    "separate": ("drums.wav",),
+    "separate": ("drums.wav", "vocals.wav"),
     "transcribe": ("activations.npy",),
     "tempo": ("beats.json",),
+    "lyrics": ("lyrics.json",),  # .lrc/.txt only exist when lyrics were found
     "simplify": ("notes.json", "notes-daring.json"),
     "output": ("drums.mid", "drums-daring.mid", "project.RPP"),
 }

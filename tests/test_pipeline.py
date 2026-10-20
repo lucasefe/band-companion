@@ -7,13 +7,15 @@ from drums2midi.pipeline import RunOptions, resimplify, run
 
 @pytest.mark.slow
 def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
-    opts = RunOptions(out_root=tmp_path, device="cpu")
+    opts = RunOptions(out_root=tmp_path, device="cpu", lyrics=False)
     result = run(str(loop_wav), opts)
 
     for name in (
         "original.wav",
         "drums.wav",
+        "vocals.wav",
         "activations.npy",
+        "lyrics.json",
         "beats.json",
         "notes.json",
         "notes-daring.json",
@@ -33,6 +35,7 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
         "separate",
         "transcribe",
         "tempo",
+        "lyrics",
         "simplify",
         "output",
     }
@@ -40,6 +43,8 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
     again = run(str(loop_wav), opts)
     assert again.timings == {}, "second run is fully cached"
 
-    re = resimplify(result.job.dir, RunOptions(count_in=0))
-    assert set(re.timings) == {"output"}
+    assert result.lyrics == {"found": False, "lines_song_time": [], "reason": "disabled"}
+
+    re = resimplify(result.job.dir, count_in=0)
+    assert set(re.timings) == {"output"}, "saved options are reused; only count_in changed"
     assert re.layout.shift == 0

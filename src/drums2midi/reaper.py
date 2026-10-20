@@ -35,8 +35,12 @@ def write_rpp(
     stem: AudioTrack,
     midi: list[MidiTrack],
     original: AudioTrack | None = None,
+    markers: list[tuple[float, str]] | None = None,
 ) -> None:
-    """Reaper project: drum stem panned left, MIDI panned right, same timeline as drums.mid."""
+    """Reaper project: drum stem panned left, MIDI panned right, same timeline as drums.mid.
+
+    `markers` are (output-time seconds, text) pairs shown on the ruler, e.g. lyric lines.
+    """
     if not midi:
         raise ValueError("at least one MIDI track is required")
     bpm, meter = midi[0].seq.layout.bpm, midi[0].seq.layout.meter
@@ -44,6 +48,8 @@ def write_rpp(
         '<REAPER_PROJECT 0.1 "7.0/drums2midi" 0',
         f"  TEMPO {_num(bpm)} {meter} 4",
     ]
+    for i, (seconds, text) in enumerate(markers or [], start=1):
+        lines.append(f"  MARKER {i} {_num(max(seconds, 0.0))} {_quote(text)} 0")
     lines += _audio_track(stem)
     for m in midi:
         lines += _midi_track(m)

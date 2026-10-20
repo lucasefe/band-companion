@@ -136,7 +136,14 @@ def build_sequence(
     return Sequence(events=events, end_tick=end_tick, layout=layout, tempo_map=tempo_map)
 
 
-def write_midi(path: Path, seq: Sequence, *, track_name: str = "Drums") -> None:
+def write_midi(
+    path: Path,
+    seq: Sequence,
+    *,
+    track_name: str = "Drums",
+    lyrics: list[tuple[float, str]] | None = None,
+) -> None:
+    """Write the sequence; `lyrics` are (output-time seconds, text) pairs for FF 05 events."""
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("track_name", name=track_name, time=0))
     track.append(
@@ -146,6 +153,8 @@ def write_midi(path: Path, seq: Sequence, *, track_name: str = "Drums") -> None:
     timed: list[tuple[int, int, mido.Message | mido.MetaMessage]] = []
     for tick, tempo in seq.tempo_map.tempo_events():
         timed.append((tick, 0, mido.MetaMessage("set_tempo", tempo=tempo)))
+    for seconds, text in lyrics or []:
+        timed.append((seq.tempo_map.tick(seconds), 0, mido.MetaMessage("lyrics", text=text)))
     for i, e in enumerate(seq.events):
         kind = "note_on" if e.status == NOTE_ON else "note_off"
         msg = mido.Message(kind, channel=DRUM_CHANNEL, note=e.data1, velocity=e.data2)
@@ -159,6 +168,6 @@ def write_midi(path: Path, seq: Sequence, *, track_name: str = "Drums") -> None:
         track.append(msg)
     track.append(mido.MetaMessage("end_of_track", time=max(seq.end_tick - cursor, 0)))
 
-    midi = mido.MidiFile(type=1, ticks_per_beat=PPQ)
+    midi = mido.MidiFile(type=1, ticks_per_beat=PPQ, charset="utf-8")
     midi.tracks.append(track)
     midi.save(path)

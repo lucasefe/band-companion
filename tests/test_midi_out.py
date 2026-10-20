@@ -106,3 +106,17 @@ def test_write_midi_without_count_in_keeps_song_time(loop_beats, tmp_path: Path)
     path = tmp_path / "drums.mid"
     write_midi(path, build_sequence(notes, loop_beats, count_in=None))
     assert note_ons(path) == [(2 * PPQ, 36, 100)]
+
+
+def test_write_midi_embeds_lyric_events(loop_beats, tmp_path: Path):
+    notes = [Note(0.0, "kick", 36, 100, 0.9)]
+    seq = build_sequence(notes, loop_beats, count_in=None)
+    path = tmp_path / "drums.mid"
+    write_midi(path, seq, lyrics=[(0.0, "Tal vez te olvides de mí"), (1.2, "Pero esta vez")])
+    midi = mido.MidiFile(path, charset="utf-8")
+    lyric_msgs, tick = [], 0
+    for msg in midi.tracks[0]:
+        tick += msg.time
+        if msg.type == "lyrics":
+            lyric_msgs.append((tick, msg.text))
+    assert lyric_msgs == [(0, "Tal vez te olvides de mí"), (2 * PPQ, "Pero esta vez")]

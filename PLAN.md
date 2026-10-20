@@ -192,17 +192,48 @@ transcription, one in each ear. The user adds the drum instrument themselves.
 - Track 3 "<title> (original)": `original.wav` at position `shift`, muted.
 - Format was derived from a project saved by Reaper 7 and is locked with tests.
 
+### lyrics (studio recordings only — no live/cover timing)
+
+Goal: a line-timed `lyrics.lrc` for Band Companion plus the same lines in Reaper, resiliently.
+
+1. **Identify the song.** `--artist/--title` → embedded tags (ffprobe) → YouTube metadata
+   (`track`/`artist` on auto-uploads, else `Artist - Title ft. X (Official Video)` parsed from
+   the title, channel as artist hint) → file/folder name (`01 - Title`). Duration from the audio.
+2. **Find the text.** `--lyrics-file` wins. Otherwise **LRCLIB** (`lrclib.net`, open, no key):
+   `/api/search` by artist+title, then free-text, then title only. Candidates ranked by
+   accent/case-insensitive title and artist similarity, duration closeness (±3 s ≈ full marks,
+   ≥10 s none), synced-lyrics bonus, instrumental penalty; accept ≥ 0.6. Retries with backoff
+   (the server 503s under load), proper User-Agent, every candidate considered is recorded.
+3. **Check the timing against *our* audio.** Demucs' vocals stem is kept (`vocals.wav`, mono
+   16 kHz). A smoothed loudness curve; for each candidate shift in ±6 s, the mean
+   (loudness after − before) at the line starts = onset contrast. The argmax is the suggested
+   shift. It is **applied only when |shift| ≥ 0.5 s** and the gain is clear: LRC lines are
+   conventionally tagged slightly early and envelopes lag onsets, so sub-half-second
+   disagreements are normal (No podrás: +0.28 suggested, ignored; Fotografía video vs album
+   cut: +0.80 applied, correct). `--lyrics-offset` overrides. "On-vocal %" = share of lines
+   whose start sits on sung audio (−0.15/+0.35 s window) — the reported confidence.
+4. **Outputs.** `lyrics.lrc` in song time (line-level, `[ar:][ti:][al:][length:]` header),
+   `lyrics.txt`, `lyrics.json` (hints, candidates, offset evidence, lines). In output time:
+   a Reaper **marker per line** in `project.RPP` and **lyric meta-events** (FF 05, UTF-8) in
+   both `.mid` files. A miss is also written to `lyrics.json` so the stage caches like the rest;
+   `drums2midi lyrics <job-dir>` redoes only this stage with the job's saved options.
+
+Later: Whisper (`mlx-whisper`) on the vocals stem for songs LRCLIB doesn't have.
+
 ### Job folder
 
 ```
 ~/Music/Drums2MIDI/<title> (<hash>)/
-├── manifest.json      # source, hash, params per artifact, timings
+├── manifest.json      # source, hash, options, params per artifact, timings
+├── source.webm        # (URLs) what yt-dlp downloaded
 ├── original.wav
-├── drums.wav
+├── drums.wav / vocals.wav
 ├── activations.npy
 ├── beats.json
-├── notes.json
+├── notes.json / notes-daring.json
 ├── drums.mid          ← the deliverable
+├── drums-daring.mid
+├── lyrics.lrc / lyrics.txt / lyrics.json
 └── project.RPP
 ```
 
@@ -230,10 +261,11 @@ transcription, one in each ear. The user adds the drum instrument themselves.
 
 | # | Deliverable | Done when |
 |---|---|---|
-| M0 | Tooling | `mise install` from a clean clone → `drums2midi doctor` all green. |
-| M1 | `run file.wav` → `drums.mid` (raw style, constant tempo, count-in) | Demucs runs on MPS here (weights download verified); loop tests pass; a real song opens in Reaper and grooves with the original. |
-| M2 | Tempo map, `essence`/`detailed`, downbeat/count-in alignment, `resimplify`, `project.RPP` | Opening `project.RPP` shows 3 aligned tracks; Reaper's bar lines match the song; switching style is instant. |
-| M3 | YouTube URLs, `--bpm`, full `doctor`, `--json`, polish | `drums2midi run "https://youtu.be/…"` works end to end with live progress. |
+| M0 ✅ | Tooling | `mise install` from a clean clone → `drums2midi doctor` all green. |
+| M1 ✅ | `run file.wav` → `drums.mid` (raw style, constant tempo, count-in) | Demucs runs on MPS here (weights download verified); loop tests pass; a real song opens in Reaper and grooves with the original. |
+| M1.5 ✅ | `project.RPP` (stem L / MIDI R / original muted), `daring` profile, YouTube URLs, lyrics | Reaper project verified by hand; two songs (file + URL) run end to end with lyrics. |
+| M2 | Tempo map, `essence`/`detailed`, `--bpm`/`--downbeat-offset` | Reaper's bar lines follow the song; switching style is instant. |
+| M3 | `--json`, fuller `doctor`, Whisper fallback for lyrics, polish | |
 
 Tune `essence` on real songs between M2 and M3 — that is where the product lives.
 

@@ -7,6 +7,7 @@ from drums2midi.audio import read_wav, write_wav
 from drums2midi.devices import resolve_device
 
 MODELS = {"fast": "htdemucs", "best": "htdemucs_ft"}
+VOCALS_SR = 16000  # the vocal stem is only used for analysis (lyrics timing)
 
 ProgressFn = Callable[[float], None]
 
@@ -17,10 +18,14 @@ def separate(
     *,
     quality: str = "fast",
     device: str = "auto",
+    vocals_wav: Path | None = None,
     no_drums_wav: Path | None = None,
     progress: ProgressFn | None = None,
 ) -> str:
-    """Run Demucs and write the drum stem. Returns the device actually used."""
+    """Run Demucs and write the drum stem (plus optional vocals / no-drums stems).
+
+    Returns the device actually used.
+    """
     import torch
 
     model_name = MODELS[quality]
@@ -47,6 +52,13 @@ def separate(
         stems = _run(model_name, dev, mix, sr, callback)
 
     write_wav(drums_wav, stems["drums"].numpy().T, sr)
+    if vocals_wav is not None:
+        import librosa
+        import soundfile as sf
+
+        mono = stems["vocals"].numpy().mean(axis=0)
+        mono = librosa.resample(mono, orig_sr=sr, target_sr=VOCALS_SR)
+        sf.write(vocals_wav, mono, VOCALS_SR, subtype="PCM_16")
     if no_drums_wav is not None:
         rest = sum(v for k, v in stems.items() if k != "drums")
         write_wav(no_drums_wav, rest.numpy().T, sr)

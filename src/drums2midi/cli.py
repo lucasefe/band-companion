@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
-from rich.table import Table
+from rich.table import Column, Table
 
 from drums2midi import __version__
 from drums2midi.job import DEFAULT_ROOT
@@ -47,7 +47,9 @@ def main(
     """Extract a simplified drum MIDI track from an audio file or YouTube link."""
     if not verbose:
         warnings.simplefilter("ignore")
-        logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+        # huggingface_hub resets its logger level on import (which happens lazily, later),
+        # so the env var is the only setting that sticks.
+        os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 
 
 @app.command()
@@ -68,8 +70,17 @@ def run(
     ),
     keep_other: bool = typer.Option(False, help="Also save no_drums.wav."),
     force: bool = typer.Option(False, help="Ignore cached artifacts and rerun every stage."),
+    lyrics: bool = typer.Option(True, "--lyrics/--no-lyrics", help="Look up lyrics on lrclib.net."),
+    artist: str | None = typer.Option(None, help="Artist name for the lyrics lookup."),
+    title: str | None = typer.Option(None, help="Song title for the lyrics lookup."),
+    lyrics_file: Path | None = typer.Option(
+        None, "--lyrics-file", help="Use this .lrc/.txt instead of looking lyrics up."
+    ),
+    lyrics_offset: float | None = typer.Option(
+        None, help="Shift lyrics by this many seconds instead of measuring against the vocals."
+    ),
 ) -> None:
-    """Analyse SOURCE and write drums.mid into the job folder."""
+    """Analyse SOURCE (audio file or YouTube URL) and write MIDI, lyrics and a Reaper project."""
     from drums2midi.pipeline import RunOptions
     from drums2midi.pipeline import run as run_pipeline
 
@@ -83,6 +94,11 @@ def run(
         count_in_note=count_in_note,
         keep_other=keep_other,
         force=force,
+        lyrics=lyrics,
+        artist=artist,
+        title=title,
+        lyrics_file=lyrics_file,
+        lyrics_offset=lyrics_offset,
     )
     _execute(lambda reporter: run_pipeline(source, opts, reporter))
 
@@ -90,17 +106,50 @@ def run(
 @app.command()
 def resimplify(
     job_dir: Path = typer.Argument(..., help="An existing job folder."),
-    style: Style = typer.Option(Style.raw),
-    grid: int = typer.Option(16),
-    count_in: int = typer.Option(2),
-    count_in_note: int = typer.Option(37),
+    style: Style | None = typer.Option(None),
+    grid: int | None = typer.Option(None),
+    count_in: int | None = typer.Option(None),
+    count_in_note: int | None = typer.Option(None),
 ) -> None:
-    """Regenerate notes.json and drums.mid from cached analysis (fast)."""
-    from drums2midi.pipeline import RunOptions
+    """Regenerate notes, MIDI and the Reaper project from cached analysis (fast)."""
     from drums2midi.pipeline import resimplify as resimplify_pipeline
 
-    opts = RunOptions(style=style.value, grid=grid, count_in=count_in, count_in_note=count_in_note)
-    _execute(lambda reporter: resimplify_pipeline(job_dir.expanduser(), opts, reporter))
+    _execute(
+        lambda reporter: resimplify_pipeline(
+            job_dir.expanduser(),
+            reporter,
+            style=style.value if style else None,
+            grid=grid,
+            count_in=count_in,
+            count_in_note=count_in_note,
+        )
+    )
+
+
+@app.command(name="lyrics")
+def lyrics_cmd(
+    job_dir: Path = typer.Argument(..., help="An existing job folder."),
+    artist: str | None = typer.Option(None, help="Artist name for the lookup."),
+    title: str | None = typer.Option(None, help="Song title for the lookup."),
+    lyrics_file: Path | None = typer.Option(None, "--lyrics-file", help="Use this .lrc/.txt."),
+    lyrics_offset: float | None = typer.Option(
+        None, "--offset", help="Shift lyrics by this many seconds (skips the vocal-stem check)."
+    ),
+) -> None:
+    """Redo only the lyrics (lookup, timing check, lyrics.lrc, markers) for a job."""
+    from drums2midi.pipeline import redo_lyrics
+
+    _execute(
+        lambda reporter: redo_lyrics(
+            job_dir.expanduser(),
+            reporter,
+            lyrics=True,
+            artist=artist,
+            title=title,
+            lyrics_file=lyrics_file,
+            lyrics_offset=lyrics_offset,
+        )
+    )
 
 
 def _execute(fn) -> None:
@@ -121,9 +170,11 @@ class RichReporter:
     def __init__(self) -> None:
         self.bar = Progress(
             SpinnerColumn(finished_text="[green]✓[/]"),
-            TextColumn("{task.description}"),
+            TextColumn("{task.description}", table_column=Column(no_wrap=True, min_width=11)),
             BarColumn(bar_width=24),
-            TextColumn("{task.fields[detail]}"),
+            TextColumn(
+                "{task.fields[detail]}", table_column=Column(no_wrap=True, overflow="ellipsis")
+            ),
             TimeElapsedColumn(),
             console=console,
         )
@@ -166,6 +217,7 @@ def _print_summary(result) -> None:
     )
     for profile, counts in result.counts.items():
         table.add_row(profile, "  ".join(f"{k} {v}" for k, v in counts.items()))
+    table.add_row("lyrics", _lyrics_summary(result.lyrics))
     if layout.count_in_seconds:
         table.add_row(
             "count-in",
@@ -177,6 +229,37 @@ def _print_summary(result) -> None:
     table.add_row("folder", escape(str(job.dir)))
     console.print()
     console.print(table)
+
+
+def _lyrics_summary(info: dict) -> str:
+    if not info.get("found"):
+        reason = info.get("error") or info.get("reason") or "not found"
+        hints = info.get("hints") or {}
+        looked = " / ".join(str(v) for v in (hints.get("artist"), hints.get("title")) if v)
+        return f"[yellow]{escape(reason)}[/]" + (
+            f"  (looked for: {escape(looked)})" if looked else ""
+        )
+    ly = info["lyrics"]
+    meta = ly.get("meta", {})
+    who = f"{meta.get('artist', '?')} – {meta.get('title', '?')}"
+    n = len(info.get("lines_song_time", []))
+    parts = [
+        escape(who),
+        f"{n} timed lines" if ly.get("synced") else "plain text only",
+        ly["source"],
+    ]
+    off = info.get("offset") or {}
+    if off.get("source") == "manual":
+        parts.append(f"offset {off['applied']:+.2f}s (manual)")
+    elif off:
+        applied, suggested = off.get("applied", 0.0), off.get("suggested", 0.0)
+        if applied:
+            parts.append(f"[yellow]offset {applied:+.2f}s applied[/]")
+        elif abs(suggested) >= 0.3:
+            parts.append(f"offset 0 (vocals suggest {suggested:+.2f}s)")
+        if off.get("agreement_at_applied") is not None:
+            parts.append(f"on-vocal {off['agreement_at_applied']:.0%}")
+    return " · ".join(parts)
 
 
 def _binary_version(name: str, *args: str) -> tuple[bool, str]:

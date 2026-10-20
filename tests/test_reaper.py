@@ -78,3 +78,19 @@ def test_midi_track_mirrors_the_sequence(project: str):
     total_ticks = sum(int(e[0]) for e in events)
     assert total_ticks % (4 * PPQ) == 0, "source ends on a bar line"
     assert "IGNTEMPO 0 100 4 4" in midi
+
+
+def test_markers_are_written_at_project_level(loop_beats, tmp_path: Path):
+    notes = [Note(0.0, "kick", 36, 100, 0.9)]
+    seq = build_sequence(notes, loop_beats, count_in=CountIn(bars=1))
+    path = tmp_path / "project.RPP"
+    write_rpp(
+        path,
+        stem=AudioTrack("drums", "drums.wav", 9.6, seq.layout.shift),
+        midi=[MidiTrack("m", "m", seq)],
+        markers=[(2.4 + 17.49, 'Tal vez te "olvides"'), (-0.5, "clamped")],
+    )
+    text = path.read_text()
+    head = text.split("<TRACK")[0]
+    assert "  MARKER 1 19.89 \"Tal vez te 'olvides'\" 0\n" in head
+    assert '  MARKER 2 0 "clamped" 0\n' in head

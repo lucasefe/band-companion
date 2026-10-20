@@ -1,10 +1,12 @@
 # drums2midi
 
-Point it at a song → get the drums as MIDI, with a count-in, plus a Reaper project that lets you
-hear the real drums in one ear and the MIDI in the other.
+Point it at a song (file or YouTube link) → get the drums as MIDI with a count-in, the lyrics
+as a timed `.lrc`, and a Reaper project that lets you hear the real drums in one ear and the
+MIDI in the other with the lyrics on the ruler.
 
 ```bash
 drums2midi run "~/Music/No Podrás.wav"
+drums2midi run "https://www.youtube.com/watch?v=flr8vDQ9Wuc"
 ```
 
 ```
@@ -13,11 +15,13 @@ drums2midi run "~/Music/No Podrás.wav"
 ✓ transcribe  ━━━━━━━━━━━━━━━━━━━━━━━━ 2.9s    # ADTOF
 ✓ tempo       ━━━━━━━━━━━━━━━━━━━━━━━━ 1.2s    # Beat This!
 ✓ simplify    ━━━━━━━━━━━━━━━━━━━━━━━━ 0.4s
+✓ lyrics      ━━━━━━━━━━━━━━━━━━━━━━━━ Cristian Castro – No Podras · 41 lines
 ✓ output      ━━━━━━━━━━━━━━━━━━━━━━━━ 0.0s
 title         NoPodras
 tempo         120 bpm, 4/4, first downbeat at 1.46s
 conservative  kick 257  snare 247  tom 20  hihat 673  cymbal 55
 daring        kick 261  snare 260  tom 75  hihat 808  cymbal 129
+lyrics        Cristian Castro – No Podras · 41 timed lines · lrclib:24332759 · on-vocal 93%
 count-in      4.00s; audio starts at 2.540s in the DAW timeline
 midi          ~/Music/Drums2MIDI/NoPodras (b1660813)/drums.mid
 reaper        ~/Music/Drums2MIDI/NoPodras (b1660813)/project.RPP
@@ -50,12 +54,18 @@ drums2midi run <audio-file> [options]
     --device auto|mps|cpu
     --keep-other          also save no_drums.wav
     --force               ignore the cache and rerun everything
+    --artist / --title    help the lyrics lookup when tags/file name are not enough
+    --lyrics-file FILE    use your own .lrc/.txt instead of looking lyrics up
+    --lyrics-offset SEC   shift the lyrics by hand (skips the automatic check)
+    --no-lyrics
 
 drums2midi resimplify <job-dir> [--count-in 0 …]   # regenerate MIDI/Reaper from cached analysis
+drums2midi lyrics <job-dir> [--artist … --title … --offset …]   # redo only the lyrics
 drums2midi doctor                                    # check tools, packages, GPU
 ```
 
-Supported inputs: wav, mp3, m4a, aac, flac, aiff, ogg, opus. YouTube links are planned.
+Supported inputs: wav, mp3, m4a, aac, flac, aiff, ogg, opus, or any URL `yt-dlp` understands
+(YouTube, …). The same URL always maps to the same job folder.
 
 ## What you get
 
@@ -63,9 +73,12 @@ Supported inputs: wav, mp3, m4a, aac, flac, aiff, ogg, opus. YouTube links are p
 ~/Music/Drums2MIDI/<title> (<hash>)/
 ├── drums.mid           the drums, conservative detection, with count-in   ← the deliverable
 ├── drums-daring.mid    same timeline, lower thresholds: more toms/cymbals/ghost notes
+├── lyrics.lrc          timed lyrics, song time, ready for an LRC player   ← the other deliverable
+├── lyrics.txt / lyrics.json   plain text; where the lyrics came from and the timing evidence
 ├── project.RPP         Reaper project (see below)
 ├── original.wav        your song, 44.1 kHz stereo
 ├── drums.wav           the isolated drum stem (Demucs)
+├── vocals.wav          the vocal stem, mono 16 kHz (used to check the lyrics timing)
 ├── notes.json / notes-daring.json   the hits with time, class, velocity, confidence
 ├── beats.json          beats, downbeats, BPM, meter
 ├── activations.npy     raw ADTOF output (for re-simplifying without re-running the models)
@@ -95,6 +108,17 @@ Velocity follows the model's confidence, so the extra, less certain hits come in
 
 **MIDI notes (GM):** kick 36, snare 38, toms 45, hi-hat 42, cymbals 49, count-in 37.
 
+**Lyrics.** The song is identified from your `--artist/--title`, the file's tags, the YouTube
+title/channel, or the file name, and looked up on [LRCLIB](https://lrclib.net) (open, no
+account). Candidates are ranked by name similarity, duration and whether they are time-synced.
+The result is then checked against the isolated vocal stem: if the lines are grossly off (a
+music video with a longer intro than the album cut, for instance) a constant shift is applied
+automatically; small disagreements are left alone because LRC lines are conventionally tagged a
+touch early. `lyrics.json` shows what was considered and why. Lines also go into the Reaper
+project as markers and into the `.mid` files as lyric events. Studio recordings only: the
+timing comes from a database, so a live or cover version will have the right words at the wrong
+times.
+
 ## How it works
 
 ```
@@ -116,6 +140,8 @@ file ─ffmpeg→ original.wav ─Demucs→ drums.wav ─ADTOF→ activations �
 - Constant tempo for now; the per-beat tempo map is next on the list.
 - Notes are not yet quantized ("raw" style); grid-snapped `essence`/`detailed` styles are planned.
 - Dense mixes (metal, busy electronic) give messier hi-hats.
+- Lyrics need the song to exist on LRCLIB; originals and obscure songs come back "not found"
+  (a Whisper fallback is planned). `yt-dlp` needs `mise upgrade yt-dlp` when YouTube changes.
 
 ## Development
 
