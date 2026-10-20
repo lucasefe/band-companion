@@ -182,15 +182,15 @@ waiting for Demucs again.
 - Time signature event from the detected meter (4/4 normally).
 
 ### output: project.RPP
-Plain-text Reaper project:
+Plain-text Reaper project whose only job is **timing**: an A/B of the real drums against the
+transcription, one in each ear. The user adds the drum instrument themselves.
 - Project tempo = global BPM, time signature from meter.
-- Track 1 "Original": audio item → `original.wav`, position = `shift`, volume −6 dB.
-- Track 2 "Drums (stem)": audio item → `drums.wav`, position = `shift`, muted.
-- Track 3 "Drums MIDI": MIDI item at 0 referencing `drums.mid`
-  (`<SOURCE MIDI FILE "…">`). No FX for now.
-- Verified by opening in Reaper, then locked with a golden-file test. Once a drum instrument is
-  added in Reaper and the project saved, that `.RPP` becomes the template for an FX block
-  (`--instrument` flag later).
+- Track 1 "<title> (drums)": `drums.wav` at position `shift`, panned hard **left**, −9 dB.
+- Track 2 "<title> (MIDI)": in-project MIDI item at 0, panned hard **right**, no FX. The events
+  are embedded in Reaper's own `E <delta> <status> <d1> <d2>` format and come from the same
+  `Sequence` that produced `drums.mid`, so the two can never drift apart.
+- Track 3 "<title> (original)": `original.wav` at position `shift`, muted.
+- Format was derived from a project saved by Reaper 7 and is locked with tests.
 
 ### Job folder
 

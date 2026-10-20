@@ -3,7 +3,16 @@ from pathlib import Path
 import mido
 import pytest
 
-from drums2midi.midi_out import PPQ, CountIn, TempoMap, plan_layout, write_midi
+from drums2midi.midi_out import (
+    NOTE_OFF,
+    NOTE_ON,
+    PPQ,
+    CountIn,
+    TempoMap,
+    build_sequence,
+    plan_layout,
+    write_midi,
+)
 from drums2midi.simplify import Note
 from drums2midi.tempo import Beats
 
@@ -24,6 +33,7 @@ def test_tempo_map_constant():
     assert tm.tick(0) == 0
     assert tm.tick(0.5) == PPQ
     assert tm.tick(2.0) == 4 * PPQ
+    assert tm.seconds(4 * PPQ) == pytest.approx(2.0)
     assert tm.tempo_events() == [(0, 500_000)]
 
 
@@ -55,10 +65,23 @@ def test_layout_without_count_in(loop_beats):
     assert layout.shift == 0 and layout.count_in_seconds == 0
 
 
+def test_sequence_orders_offs_before_ons_and_ends_on_a_bar(loop_beats):
+    notes = [Note(0.0, "kick", 36, 100, 0.9), Note(0.6, "snare", 38, 90, 0.8)]
+    seq = build_sequence(notes, loop_beats, count_in=None)
+    assert [(e.tick, e.status) for e in seq.events] == [
+        (0, NOTE_ON),
+        (PPQ // 8, NOTE_OFF),
+        (PPQ, NOTE_ON),
+        (PPQ + PPQ // 8, NOTE_OFF),
+    ]
+    assert seq.end_tick == 4 * PPQ, "one full bar"
+
+
 def test_write_midi_count_in_and_shifted_notes(loop_beats, tmp_path: Path):
     notes = [Note(0.0, "kick", 36, 100, 0.9), Note(0.6, "snare", 38, 90, 0.8)]
+    seq = build_sequence(notes, loop_beats, count_in=CountIn(bars=2, note=37))
     path = tmp_path / "drums.mid"
-    layout = write_midi(path, notes, loop_beats, count_in=CountIn(bars=2, note=37))
+    write_midi(path, seq)
 
     ons = note_ons(path)
     clicks = [o for o in ons if o[1] == 37]
@@ -68,7 +91,7 @@ def test_write_midi_count_in_and_shifted_notes(loop_beats, tmp_path: Path):
     kick, snare = [o for o in ons if o[1] in (36, 38)]
     assert kick == (8 * PPQ, 36, 100), "first kick lands exactly one beat after the last click"
     assert snare[0] == 9 * PPQ
-    assert layout.shift == pytest.approx(4.8)
+    assert seq.layout.shift == pytest.approx(4.8)
 
     midi = mido.MidiFile(path)
     assert midi.ticks_per_beat == PPQ
@@ -81,5 +104,5 @@ def test_write_midi_count_in_and_shifted_notes(loop_beats, tmp_path: Path):
 def test_write_midi_without_count_in_keeps_song_time(loop_beats, tmp_path: Path):
     notes = [Note(1.2, "kick", 36, 100, 0.9)]
     path = tmp_path / "drums.mid"
-    write_midi(path, notes, loop_beats, count_in=None)
+    write_midi(path, build_sequence(notes, loop_beats, count_in=None))
     assert note_ons(path) == [(2 * PPQ, 36, 100)]

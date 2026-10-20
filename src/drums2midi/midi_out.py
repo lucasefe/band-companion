@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from drums2midi.tempo import Beats
 PPQ = 480
 NOTE_LENGTH_TICKS = PPQ // 8  # 1/32 note
 DRUM_CHANNEL = 9
+NOTE_ON = 0x90 | DRUM_CHANNEL
+NOTE_OFF = 0x80 | DRUM_CHANNEL
 
 
 @dataclass
@@ -38,6 +41,13 @@ class TempoMap:
         start_sec, start_tick, spb = self.segments[0]
         return max(0, start_tick + round((seconds - start_sec) / spb * PPQ))
 
+    def seconds(self, tick: int) -> float:
+        for start_sec, start_tick, spb in reversed(self.segments):
+            if tick >= start_tick:
+                return start_sec + (tick - start_tick) / PPQ * spb
+        start_sec, start_tick, spb = self.segments[0]
+        return start_sec + (tick - start_tick) / PPQ * spb
+
     def tempo_events(self) -> list[tuple[int, int]]:
         """(tick, microseconds per beat) for every segment."""
         return [(start_tick, round(spb * 1_000_000)) for _, start_tick, spb in self.segments]
@@ -53,6 +63,24 @@ class Layout:
     first_downbeat: float  # output-time second of the song's first downbeat
     bpm: float
     meter: int
+
+
+@dataclass
+class Event:
+    """A channel MIDI event at an absolute tick."""
+
+    tick: int
+    status: int
+    data1: int
+    data2: int
+
+
+@dataclass
+class Sequence:
+    events: list[Event]  # sorted by tick; note-offs precede note-ons at equal ticks
+    end_tick: int  # end of the last bar containing an event
+    layout: Layout
+    tempo_map: TempoMap
 
 
 def plan_layout(beats: Beats, count_in: CountIn | None) -> Layout:
@@ -71,33 +99,21 @@ def plan_layout(beats: Beats, count_in: CountIn | None) -> Layout:
     )
 
 
-def write_midi(
-    path: Path,
+def build_sequence(
     notes: list[Note],
     beats: Beats,
     *,
     count_in: CountIn | None = None,
     tempo_map: TempoMap | None = None,
-    track_name: str = "Drums",
-) -> Layout:
+) -> Sequence:
     layout = plan_layout(beats, count_in)
     tempo_map = tempo_map or TempoMap.constant(beats.bpm)
-
-    # (tick, order, message): order makes note_offs precede note_ons at the same tick.
-    events: list[tuple[int, int, mido.Message]] = []
+    events: list[Event] = []
 
     def add_note(seconds: float, note: int, velocity: int) -> None:
         on = tempo_map.tick(seconds)
-        events.append(
-            (on, 1, mido.Message("note_on", channel=DRUM_CHANNEL, note=note, velocity=velocity))
-        )
-        events.append(
-            (
-                on + NOTE_LENGTH_TICKS,
-                0,
-                mido.Message("note_off", channel=DRUM_CHANNEL, note=note, velocity=0),
-            )
-        )
+        events.append(Event(on, NOTE_ON, note, velocity))
+        events.append(Event(on + NOTE_LENGTH_TICKS, NOTE_OFF, note, 0))
 
     if count_in:
         spb = 60.0 / beats.bpm
@@ -112,23 +128,37 @@ def write_midi(
     for n in notes:
         add_note(n.time + layout.shift, n.note, n.velocity)
 
-    events.sort(key=lambda e: (e[0], e[1]))
+    events.sort(key=lambda e: (e.tick, e.status == NOTE_ON))
 
+    bar_ticks = PPQ * beats.meter
+    last = events[-1].tick if events else 0
+    end_tick = (math.floor(last / bar_ticks) + 1) * bar_ticks
+    return Sequence(events=events, end_tick=end_tick, layout=layout, tempo_map=tempo_map)
+
+
+def write_midi(path: Path, seq: Sequence, *, track_name: str = "Drums") -> None:
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("track_name", name=track_name, time=0))
-    track.append(mido.MetaMessage("time_signature", numerator=beats.meter, denominator=4, time=0))
-    for tick, tempo in tempo_map.tempo_events():
-        events.append((tick, -1, mido.MetaMessage("set_tempo", tempo=tempo)))
-    events.sort(key=lambda e: (e[0], e[1]))
+    track.append(
+        mido.MetaMessage("time_signature", numerator=seq.layout.meter, denominator=4, time=0)
+    )
+
+    timed: list[tuple[int, int, mido.Message | mido.MetaMessage]] = []
+    for tick, tempo in seq.tempo_map.tempo_events():
+        timed.append((tick, 0, mido.MetaMessage("set_tempo", tempo=tempo)))
+    for i, e in enumerate(seq.events):
+        kind = "note_on" if e.status == NOTE_ON else "note_off"
+        msg = mido.Message(kind, channel=DRUM_CHANNEL, note=e.data1, velocity=e.data2)
+        timed.append((e.tick, 1 + i, msg))
+    timed.sort(key=lambda t: (t[0], t[1]))
 
     cursor = 0
-    for tick, _, msg in events:
+    for tick, _, msg in timed:
         msg.time = tick - cursor
         cursor = tick
         track.append(msg)
-    track.append(mido.MetaMessage("end_of_track", time=0))
+    track.append(mido.MetaMessage("end_of_track", time=max(seq.end_tick - cursor, 0)))
 
     midi = mido.MidiFile(type=1, ticks_per_beat=PPQ)
     midi.tracks.append(track)
     midi.save(path)
-    return layout

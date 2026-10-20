@@ -173,6 +173,7 @@ def _print_summary(result) -> None:
             f"audio starts at {layout.shift:.3f}s in the DAW timeline",
         )
     table.add_row("midi", escape(str(result.midi_path)))
+    table.add_row("reaper", escape(str(result.rpp_path)))
     table.add_row("folder", escape(str(job.dir)))
     console.print()
     console.print(table)

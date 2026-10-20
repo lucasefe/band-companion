@@ -43,6 +43,7 @@ class RunResult:
     notes: list
     layout: Any
     midi_path: Path
+    rpp_path: Path
     counts: dict[str, int]
     timings: dict[str, float] = field(default_factory=dict)
 
@@ -96,7 +97,9 @@ class _Runner:
         return self.job.stage_info(name)
 
     def process(self) -> RunResult:
-        from drums2midi.midi_out import CountIn, write_midi
+        from drums2midi.audio import duration_seconds
+        from drums2midi.midi_out import CountIn, build_sequence, write_midi
+        from drums2midi.reaper import STEM_VOLUME_DB, AudioTrack, write_rpp
         from drums2midi.separate import MODELS, separate
         from drums2midi.simplify import count_by_class, load_notes, save_notes, simplify
         from drums2midi.tempo import Beats, detect_beats
@@ -157,27 +160,42 @@ class _Runner:
             "count_in_note": opts.count_in_note,
             "tempo": "constant",
         }
-        layout_holder: dict[str, Any] = {}
+        seq = build_sequence(notes, beats, count_in=count_in)
 
         def do_output() -> dict:
-            layout = write_midi(
-                job.path("drums.mid"), notes, beats, count_in=count_in, track_name=job.title
+            write_midi(job.path("drums.mid"), seq, track_name=job.title)
+            duration = duration_seconds(job.path("original.wav"))
+            write_rpp(
+                job.path("project.RPP"),
+                title=job.title,
+                seq=seq,
+                stem=AudioTrack(
+                    name=f"{job.title} (drums)",
+                    file="drums.wav",
+                    duration=duration,
+                    position=seq.layout.shift,
+                    pan=-1.0,
+                    volume_db=STEM_VOLUME_DB,
+                ),
+                original=AudioTrack(
+                    name=f"{job.title} (original)",
+                    file="original.wav",
+                    duration=duration,
+                    position=seq.layout.shift,
+                    muted=True,
+                ),
             )
-            layout_holder["layout"] = layout
-            return {"shift": layout.shift, "count_in_seconds": layout.count_in_seconds}
+            return {"shift": seq.layout.shift, "count_in_seconds": seq.layout.count_in_seconds}
 
-        self.stage("output", output_params, do_output, detail="drums.mid")
-        if "layout" not in layout_holder:
-            from drums2midi.midi_out import plan_layout
-
-            layout_holder["layout"] = plan_layout(beats, count_in)
+        self.stage("output", output_params, do_output, detail="drums.mid + project.RPP")
 
         return RunResult(
             job=job,
             beats=beats,
             notes=notes,
-            layout=layout_holder["layout"],
+            layout=seq.layout,
             midi_path=job.path("drums.mid"),
+            rpp_path=job.path("project.RPP"),
             counts=count_by_class(notes),
             timings=self.timings,
         )
