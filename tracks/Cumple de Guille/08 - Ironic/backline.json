@@ -1,0 +1,45 @@
+{
+  "backline": "0.1.0",
+  "hash": "e183903b",
+  "song": {
+    "artist": "Alanis Morissette",
+    "title": "Ironic"
+  },
+  "source": {
+    "kind": "url",
+    "url": "https://www.youtube.com/watch?v=Jne9t8sHpUc",
+    "file": "source.webm",
+    "meta": {
+      "id": "Jne9t8sHpUc",
+      "title": "Alanis Morissette - Ironic (Official 4K Music Video)",
+      "track": null,
+      "artist": null,
+      "album": null,
+      "channel": "Alanis Morissette",
+      "uploader": "Alanis Morissette",
+      "duration": 247,
+      "webpage_url": "https://www.youtube.com/watch?v=Jne9t8sHpUc",
+      "upload_date": "20070519"
+    }
+  },
+  "job": "/Users/lucasefe/Music/Backline/jobs/Alanis Morissette - Ironic (e183903b)",
+  "project": "Ironic.RPP",
+  "files": {
+    "lyrics": "Ironic.lrc",
+    "reference": "Ironic.reference.wav",
+    "drums": "Ironic.wav"
+  },
+  "timeline": {
+    "count_in_bars": 2,
+    "count_in_seconds": 5.60028,
+    "song_starts_at": 4.52028,
+    "bpm": 85.71,
+    "meter": 4
+  },
+  "lyrics": {
+    "source": "lrclib:34482718",
+    "offset": 0.0,
+    "on_vocal": 0.923
+  },
+  "updated": "2026-10-20T15:59:45"
+}

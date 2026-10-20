@@ -70,5 +70,69 @@
         "local"
       ]
     }
+  },
+  "Cumple de Guille/05 - Summer Of 69": {
+    "key": "b08b12483df3ac9e.wav",
+    "bytes": 55885698,
+    "source": "Summer Of 69.wav",
+    "uploaded": [
+      "remote"
+    ],
+    "reference": {
+      "key": "b3fb598a2143e0f8.wav",
+      "bytes": 37176312,
+      "source": "Summer Of 69.reference.wav",
+      "uploaded": [
+        "remote"
+      ]
+    }
+  },
+  "Cumple de Guille/06 - I Touch Myself": {
+    "key": "6e857168baf3147f.wav",
+    "bytes": 59151150,
+    "source": "I Touch Myself.wav",
+    "uploaded": [
+      "remote"
+    ],
+    "reference": {
+      "key": "1a20000f78e97983.wav",
+      "bytes": 39433684,
+      "source": "I Touch Myself.reference.wav",
+      "uploaded": [
+        "remote"
+      ]
+    }
+  },
+  "Cumple de Guille/07 - Mary Poppins y el deshollinador": {
+    "key": "a0996d2cf9eb8f7f.wav",
+    "bytes": 66491142,
+    "source": "Mary Poppins y el deshollinador.wav",
+    "uploaded": [
+      "remote"
+    ],
+    "reference": {
+      "key": "a30d276053492c81.wav",
+      "bytes": 44327012,
+      "source": "Mary Poppins y el deshollinador.reference.wav",
+      "uploaded": [
+        "remote"
+      ]
+    }
+  },
+  "Cumple de Guille/09 - Ironic - Lyrics": {
+    "key": "9d6ea4f727c5af14.wav",
+    "bytes": 61841832,
+    "source": "Ironic - Lyrics.wav",
+    "uploaded": [
+      "remote"
+    ],
+    "reference": {
+      "key": "85089b46d5f2b555.wav",
+      "bytes": 41227472,
+      "source": "Ironic - Lyrics.reference.wav",
+      "uploaded": [
+        "remote"
+      ]
+    }
   }
 }

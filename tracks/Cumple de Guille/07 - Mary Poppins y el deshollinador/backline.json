@@ -1,0 +1,45 @@
+{
+  "backline": "0.1.0",
+  "hash": "7c317712",
+  "song": {
+    "artist": "Fabiana Cantilo",
+    "title": "Mary Poppins y el deshollinador"
+  },
+  "source": {
+    "kind": "url",
+    "url": "https://www.youtube.com/watch?v=PWx4M4dVQX0",
+    "file": "source.webm",
+    "meta": {
+      "id": "PWx4M4dVQX0",
+      "title": "Mary Poppins y el deshollinador",
+      "track": "Mary Poppins y el deshollinador",
+      "artist": "Fabiana Cantilo",
+      "album": "Algo mejor",
+      "channel": "Fabiana Cantilo",
+      "uploader": "Fabiana Cantilo",
+      "duration": 248,
+      "webpage_url": "https://www.youtube.com/watch?v=PWx4M4dVQX0",
+      "upload_date": "20141106"
+    }
+  },
+  "job": "/Users/lucasefe/Music/Backline/jobs/Fabiana Cantilo - Mary Poppins y el deshollinador (7c317712)",
+  "project": "Mary Poppins y el deshollinador.RPP",
+  "files": {
+    "lyrics": "Mary Poppins y el deshollinador.lrc",
+    "reference": "Mary Poppins y el deshollinador.reference.wav",
+    "drums": "Mary Poppins y el deshollinador.wav"
+  },
+  "timeline": {
+    "count_in_bars": 2,
+    "count_in_seconds": 4.8,
+    "song_starts_at": 3.3,
+    "bpm": 100.0,
+    "meter": 4
+  },
+  "lyrics": {
+    "source": "lrclib:34736021",
+    "offset": 0.0,
+    "on_vocal": 1.0
+  },
+  "updated": "2026-10-20T15:59:23"
+}
