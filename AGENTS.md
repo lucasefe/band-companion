@@ -26,7 +26,7 @@ The venv is activated on `cd`; `backline` is on PATH. `UV_PROJECT` points uv at 
 - `mise run deploy` — sync audio + build + `wrangler deploy`. Needs `wrangler login`.
 - `mise run check:browser` (`node scripts/browser-check.mjs [url]`) — headless Chrome run-through (leader, lyrics, reference, followers, takeover, offline, tablet) against a running preview. Run it after UI or sync changes. It derives its lyric/title expectations from the first song folder in `tracks/`, so it follows the set list; it needs the local R2 filled (`mise run sync-audio -- --local`).
 - `mise run test` / `mise run test:slow` / `mise run lint` / `mise run fmt` — the importer (pytest, ruff).
-- `backline add <file|url> [--set .. --number ..]`, `backline resimplify <job>` (reuses the job's saved options — pass `--metronome`/`--count-in` explicitly to change an existing job; config defaults only apply to new ones), `backline lyrics <job>`, `backline rename <job> --title/--artist` (job dir, project, song folder + files incl. the render, then reruns output), `backline fx-template <RPP>`, `backline doctor`.
+- `backline add <file|url> [--set .. --number ..]`, `backline resimplify <job>` (reuses the job's saved options — pass `--metronome`/`--count-in`/`--grid`/`--bpm` explicitly to change an existing job; config defaults only apply to new ones), `backline lyrics <job>`, `backline rename <job> --title/--artist` (job dir, project, song folder + files incl. the render, then reruns output), `backline fx-template <RPP>`, `backline doctor`.
 
 The reference material: `https://www.youtube.com/watch?v=flr8vDQ9Wuc` (Juanes – Fotografía; music
 video 244 s vs 241 s album cut → lyrics offset +0.80 s is expected), job
@@ -97,9 +97,14 @@ src/backline/
   reference.py  original + synthesized count-in clicks on the output timeline, 16-bit
   metronome.py  write_metronome(): one plain click per quarter note on the regularized grid
                 (modes always/gaps/off) → work/metronome.wav, mono; detect_gaps() for gaps mode
-  tempo.py      also regularize(): quarter note within 60–170 bpm, drop double-time extras in
-                phase, fill clearly skipped beats (≥1.7×), keep slow-downs; never trust downbeats
-                that imply an absurd tempo (they flip with the beats)
+  tempo.py      Beat This! (raw → work/beats.json) and the grid (work/grid.json, what everything
+                downstream uses): regularize() (quarter note within 60–170 bpm, drop double-time
+                extras in phase, fill ≥1.7× gaps, keep slow-downs; downbeats that imply an absurd
+                tempo are ignored — they flip with the beats), then choose_grid(): straight-line
+                fit on confident beats (drums active + regular) → straight grid when p95 ≤ 35 ms
+                and max ≤ 60 ms, else smooth() (local quadratic) of the tracked grid; --bpm forces
+                straight. Beat This! times sit on 10 ms frames, so ±10 ms residual is its noise
+                floor and the median interval is coarse (120.00 was really 117.68).
   reaper.py     project (metronome hard L, stem muted L, MIDI hard R + FX template, daring muted R,
                 original muted), markers, RENDER_* settings; extract_fx_chain(); is_generated()
 tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop; tests pass an explicit
@@ -120,9 +125,9 @@ Rules:
   stage's params: bump it when the output stage changes what it writes for the same inputs.
 - **One `Sequence`, every renderer.** `build_sequence()` is the single source of truth for ticks;
   `write_midi()`, `reaper.py`, the `.lrc` files, `reference.py` and `metronome.py` all derive from
-  the same `Layout`. Never compute timing in a renderer. The metronome follows the real beat
-  times (the song drifts) after `regularize()`; `beats.json` stays the raw detection; the MIDI
-  uses a constant tempo — all in song time + `shift`. "Don't be creative" with the click: one
+  the same `Layout`, built from `grid.json`. Never compute timing in a renderer. `beats.json`
+  stays the raw detection; `GRID_VERSION` in the tempo stage params must be bumped when
+  `choose_grid()` changes (the stage is cached on it). "Don't be creative" with the click: one
   sound, every quarter note, same level; the user asked for exactly that.
 - **The metronome is baked into the render on purpose** (project track hard left, MIDI drums hard
   right): no third element to keep in sync in the player, and L/R can be routed separately. The

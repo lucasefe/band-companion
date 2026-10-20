@@ -76,6 +76,8 @@ backline add <audio-file | URL> [--set "Cumple de Guille"] [--number 3]
 --lyrics-offset SEC   shift the lyrics by hand (skips the automatic check)
 --no-lyrics
 --count-in BARS       default 2 (backline.toml); 0 = none
+--grid MODE           auto (default) | straight | tracked — see The metronome
+--bpm N               force a straight grid at this tempo
 --quality fast|best   Demucs htdemucs (default) or htdemucs_ft (~4× slower)
 --force               ignore the cache and rerun every stage
 
@@ -126,13 +128,20 @@ regeneration goes to `<Title>.new.RPP` beside it.
 
 ### The metronome
 
-A plain click on every quarter note, following the song's real beats rather than a fixed grid,
-so it stays with a song that drifts. Beat trackers flip into double time or skip beats in loose
-passages, so the grid is cleaned first: the quarter-note length is chosen within a plausible
-tempo range, extra beats of double-time runs are dropped in phase, clearly missing beats are
-filled, genuine slow-downs are kept. `backline.json` reports what was done (`grid.bpm`,
-`beats_dropped`, `beats_inserted`). Modes in `backline.toml`: `always` (default), `gaps` (only
-where the drum stem goes quiet for a bar or more — intros, breakdowns, stops), `off`.
+A plain click on every quarter note of the **grid the song is played to**. Studio recordings
+are almost always played to a click, so one tempo fits every drummed beat within a few
+milliseconds — and that line, extrapolated, is right through the intro and the breaks where a
+beat tracker follows the strumming instead. So: the beats the tracker is confident about (drums
+playing, regular spacing) get a straight-line fit; if 95 % of them are within 35 ms the whole song
+gets a perfectly regular grid at the fitted tempo (Ironic: 85.30 bpm, the intro dead straight).
+If the fit is loose — a recording that breathes, like *Don't Get Me Wrong* — the cleaned,
+smoothed tracked beats are used instead. `backline.json` reports it: `grid.mode`
+(straight / tracked / manual), `bpm`, fit residuals, beats dropped or inserted. Override with
+`--bpm 85.3` (force a straight grid at that tempo) or `--grid tracked`.
+
+The same grid sets the count-in, the MIDI tempo and the Reaper project tempo, so for a straight
+song Reaper's bar lines land on the song's bars. Metronome modes in `backline.toml`: `always`
+(default), `gaps` (only where the drum stem goes quiet for a bar or more), `off`;
 `backline resimplify <job> --metronome gaps` switches a song, then re-render.
 
 *Conservative vs daring:* the conservative MIDI uses the transcriber's default thresholds and
@@ -421,7 +430,7 @@ magick -background '#0b0b0d' -density 384 icon-maskable.svg -resize 180x180 appl
 ## Limitations
 
 - Five drum classes: all toms are one note, crash and ride are one note, no open/closed hi-hat.
-- Constant tempo in the MIDI and the project; a per-beat tempo map is planned.
+- The MIDI and the project use one tempo (the fitted one); for the few recordings that drift, the click follows them but the MIDI grid does not — a per-beat tempo map is planned.
 - Drum notes are not quantized yet; grid-snapped styles are planned.
 - Lyrics need the song to exist on LRCLIB; originals come back "not found" (a Whisper fallback is planned).
 - `yt-dlp` breaks when YouTube changes; `mise upgrade yt-dlp` fixes it.

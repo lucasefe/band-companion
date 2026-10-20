@@ -72,10 +72,15 @@ def add(
         Quality.fast, help="Demucs model: fast=htdemucs, best=htdemucs_ft (~4x slower)."
     ),
     style: Style = typer.Option(Style.raw, help="How much to simplify the transcription."),
-    grid: int = typer.Option(
-        16, help="Quantization grid: 8, 16, 12 (triplet 8ths), 24 (triplet 16ths)."
+    quantize: int = typer.Option(
+        16, help="Quantization grid for the simplified styles: 8, 16, 12, 24 (planned)."
     ),
     device: Device = typer.Option(Device.auto, help="Compute device for Demucs and Beat This!."),
+    grid: str = typer.Option(
+        "auto",
+        help="Beat grid: auto (straight when the song is played to a click), straight, tracked.",
+    ),
+    bpm: float | None = typer.Option(None, help="Force a straight grid at this tempo."),
     count_in: int | None = typer.Option(
         None,
         help="Bars of count-in before the first downbeat; 0 disables. Default from backline.toml.",
@@ -110,8 +115,10 @@ def add(
         number=number,
         quality=quality.value,
         style=style.value,
-        grid=grid,
+        quantize=quantize,
         device=device.value,
+        grid=grid,
+        bpm=bpm,
         count_in=cfg.count_in_bars if count_in is None else count_in,
         count_in_note=cfg.count_in_note if count_in_note is None else count_in_note,
         metronome=metronome or cfg.metronome,
@@ -132,11 +139,13 @@ def add(
 def resimplify(
     job_dir: Path = typer.Argument(..., help="An existing job folder."),
     style: Style | None = typer.Option(None),
-    grid: int | None = typer.Option(None),
+    quantize: int | None = typer.Option(None),
     count_in: int | None = typer.Option(None),
     count_in_note: int | None = typer.Option(None),
     to: Path | None = typer.Option(None, "--to", help="Song folder for the .lrc and the render."),
     metronome: str | None = typer.Option(None, help="always | gaps | off"),
+    grid: str | None = typer.Option(None, help="auto | straight | tracked"),
+    bpm: float | None = typer.Option(None, help="Force a straight grid at this tempo."),
 ) -> None:
     """Regenerate notes, MIDI, lyrics files and the Reaper project from cached analysis (fast)."""
     from backline.pipeline import resimplify as resimplify_pipeline
@@ -146,11 +155,13 @@ def resimplify(
             job_dir.expanduser(),
             reporter,
             style=style.value if style else None,
-            grid=grid,
+            quantize=quantize,
             count_in=count_in,
             count_in_note=count_in_note,
             deliver_to=to,
             metronome=metronome,
+            grid=grid,
+            bpm=bpm,
         )
     )
 
@@ -301,9 +312,15 @@ def _print_summary(result) -> None:
     table.add_column(overflow="fold")
     song = f"{job.artist} – {job.title}" if job.artist else job.title
     table.add_row("song", escape(song))
+    grid = job.stage_info("tempo").get("grid") or {}
+    fit = ""
+    if grid.get("residual_p95_ms") is not None:
+        fit = f"; fit p95 {grid['residual_p95_ms']:g} ms, max {grid['residual_max_ms']:g} ms"
+    note = f" [dim]({grid['reason']})[/]" if grid.get("reason") else ""
     table.add_row(
         "tempo",
-        f"{beats.bpm:g} bpm, {beats.meter}/4, first downbeat at {beats.first_downbeat:.2f}s",
+        f"{beats.bpm:g} bpm, {beats.meter}/4, first downbeat at {beats.first_downbeat:.2f}s "
+        f"— {grid.get('mode', '?')} grid{fit}{note}",
     )
     for profile, counts in result.counts.items():
         table.add_row(profile, "  ".join(f"{k} {v}" for k, v in counts.items()))

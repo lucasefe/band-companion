@@ -16,7 +16,7 @@ import soundfile as sf
 
 from backline.midi_out import CountIn, Layout
 from backline.reference import click
-from backline.tempo import Beats
+from backline.tempo import Beats, beat_levels_db
 
 MODES = ("gaps", "always", "off")
 
@@ -46,22 +46,9 @@ def detect_gaps(
 
     Gaps are snapped outwards to bar boundaries so the click always starts on a 1.
     """
-    audio, sr = sf.read(drums_wav, dtype="float32", always_2d=True)
-    mono = audio.mean(axis=1)
-    times = np.asarray(beats.beats, dtype=float)
-    if len(times) < 2:
+    if len(beats.beats) < 2:
         return []
-
-    # Per-beat RMS, in dB.
-    edges = np.append(times, times[-1] + float(np.median(np.diff(times))))
-    idx = np.clip(np.round(edges * sr).astype(int), 0, len(mono))
-    rms = np.array(
-        [
-            np.sqrt(np.mean(mono[a:b] ** 2)) if b > a else 0.0
-            for a, b in zip(idx[:-1], idx[1:], strict=True)
-        ]
-    )
-    db = 20 * np.log10(rms + 1e-9)
+    db = beat_levels_db(drums_wav, beats)
     typical = float(np.percentile(db, 75))  # what a beat with drums sounds like in this song
     quiet = db < typical + silence_db
 

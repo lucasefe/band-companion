@@ -15,7 +15,8 @@ from backline.config import Config, load_config, song_folder
 from backline.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and <title>.mid; other profiles get a suffix
-OUTPUT_FORMAT = 11  # bump when the output stage writes different files/content for the same inputs
+GRID_VERSION = 3  # bump when choose_grid() changes; the tempo stage is cached on it
+OUTPUT_FORMAT = 13  # bump when the output stage writes different files/content for the same inputs
 
 
 @dataclass
@@ -26,9 +27,11 @@ class RunOptions:
     number: int | None = None
     quality: str = "fast"
     style: str = "raw"
-    grid: int = 16
+    quantize: int = 16  # grid for the quantized styles (not implemented yet)
     device: str = "auto"
     tempo_model: str = "final"
+    grid: str = "auto"  # auto | straight | tracked
+    bpm: float | None = None  # force a straight grid at this tempo
     count_in: int = 2
     count_in_note: int = 37
     metronome: str = "always"  # always | gaps | off
@@ -231,7 +234,11 @@ def rename(
 
 
 def options_from_job(job: Job, **overrides: Any) -> RunOptions:
-    saved = job.manifest.get("options", {})
+    saved = dict(job.manifest.get("options", {}))
+    if isinstance(
+        saved.get("grid"), int
+    ):  # before the beat grid existed, `grid` was the quantize step
+        saved["quantize"] = saved.pop("grid")
     kwargs = {k: v for k, v in saved.items() if k in RunOptions.__dataclass_fields__}
     kwargs.update({k: v for k, v in overrides.items() if v is not None})
     for key in ("out_root", "deliver_to", "lyrics_file"):
@@ -327,7 +334,7 @@ class _Runner:
             save_notes,
             simplify,
         )
-        from backline.tempo import Beats, detect_beats, regularize
+        from backline.tempo import Beats, GridInfo, choose_grid, detect_beats
         from backline.transcribe import load_activations, transcribe
 
         job, opts = self.job, self.opts
@@ -361,24 +368,58 @@ class _Runner:
         self.stage("transcribe", {}, do_transcribe, [J.ACTIVATIONS], detail="adtof")
 
         def do_tempo() -> dict:
-            beats = detect_beats(job.path(J.ORIGINAL), device=opts.device, model=opts.tempo_model)
-            beats.save(job.path(J.BEATS))
-            return {"bpm": beats.bpm, "meter": beats.meter}
+            if (
+                job.path(J.BEATS).exists()
+                and job.stage_info("tempo").get("model") == opts.tempo_model
+            ):
+                beats = Beats.load(job.path(J.BEATS))  # only the grid parameters changed
+            else:
+                beats = detect_beats(
+                    job.path(J.ORIGINAL), device=opts.device, model=opts.tempo_model
+                )
+                beats.save(job.path(J.BEATS))
+            grid, info = choose_grid(
+                beats,
+                job.path(J.DRUMS),
+                duration_seconds(job.path(J.ORIGINAL)),
+                mode=opts.grid,
+                bpm=opts.bpm,
+            )
+            grid.save(job.path(J.GRID))
+            return {
+                "model": opts.tempo_model,
+                "bpm": info.bpm,
+                "meter": grid.meter,
+                "grid": asdict(info),
+                "detail": f"{info.mode} {info.bpm:g} bpm",
+            }
 
-        self.stage("tempo", {"model": opts.tempo_model}, do_tempo, [J.BEATS], detail="beat_this")
-        beats = Beats.load(job.path(J.BEATS))
+        self.stage(
+            "tempo",
+            {
+                "model": opts.tempo_model,
+                "grid": opts.grid,
+                "bpm": opts.bpm,
+                "version": GRID_VERSION,
+            },
+            do_tempo,
+            [J.BEATS, J.GRID],
+            detail="beat_this",
+        )
+        beats = Beats.load(job.path(J.GRID))  # everything downstream uses the grid
+        grid_info = GridInfo(**job.stage_info("tempo")["grid"])
 
         def do_simplify() -> dict:
             activations = load_activations(job.path(J.ACTIVATIONS))
             counts = {}
             for profile, thresholds in PROFILES.items():
                 notes = simplify(
-                    activations, beats, style=opts.style, grid=opts.grid, thresholds=thresholds
+                    activations, beats, style=opts.style, grid=opts.quantize, thresholds=thresholds
                 )
                 save_notes(
                     job.path(J.notes_file(profile, PRIMARY)),
                     notes,
-                    {"style": opts.style, "grid": opts.grid, "profile": profile},
+                    {"style": opts.style, "grid": opts.quantize, "profile": profile},
                 )
                 counts[profile] = count_by_class(notes)
             return {"counts": counts}
@@ -387,7 +428,7 @@ class _Runner:
             "simplify",
             {
                 "style": opts.style,
-                "grid": opts.grid,
+                "grid": opts.quantize,
                 "profiles": {p: list(t) for p, t in PROFILES.items()},
             },
             do_simplify,
@@ -433,20 +474,17 @@ class _Runner:
             "metronome": [opts.metronome, opts.metronome_min_bars, opts.metronome_silence_db],
         }
         fx_chain = load_fx_template()
-        # The metronome wants every quarter note; the raw detection flips to double time and
-        # skips beats in loose passages, so it reads a cleaned grid (beats.json stays raw).
-        grid, grid_stats = regularize(beats)
         gaps = (
             detect_gaps(
                 job.path(J.DRUMS),
-                grid,
+                beats,
                 min_bars=opts.metronome_min_bars,
                 silence_db=opts.metronome_silence_db,
             )
             if opts.metronome != "off"
             else []
         )
-        gap_info = gaps_in_seconds(gaps, grid, layout.shift)
+        gap_info = gaps_in_seconds(gaps, beats, layout.shift)
 
         def do_output() -> dict:
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -462,11 +500,11 @@ class _Runner:
             write_metronome(
                 job.path(J.METRONOME),
                 layout,
-                grid,
+                beats,
                 gaps,
                 mode=opts.metronome,
                 count_in=count_in,
-                tail_seconds=max(0.0, layout.shift + duration - (grid.beats[-1] + layout.shift)),
+                tail_seconds=max(0.0, layout.shift + duration - (beats.beats[-1] + layout.shift)),
             )
             rpp_path = project_target(job)
             write_rpp(
@@ -517,7 +555,7 @@ class _Runner:
             )
             write_record(
                 out_dir,
-                self._song_record(outputs, rpp_path, layout, lyrics_info, gap_info, grid_stats),
+                self._song_record(outputs, rpp_path, layout, lyrics_info, gap_info, grid_info),
             )
             return {
                 "shift": layout.shift,
@@ -584,7 +622,7 @@ class _Runner:
         return out
 
     def _song_record(
-        self, outputs, rpp_path, layout, lyrics_info, gaps, grid_stats
+        self, outputs, rpp_path, layout, lyrics_info, gaps, grid_info
     ) -> dict[str, Any]:
         """What goes into the song folder's backline.json."""
         from backline import __version__
@@ -616,15 +654,8 @@ class _Runner:
                 "bpm": layout.bpm,
                 "meter": layout.meter,
             },
-            "metronome": {
-                "mode": self.opts.metronome,
-                "grid": {
-                    "bpm": grid_stats.bpm,
-                    "beats_dropped": grid_stats.dropped,
-                    "beats_inserted": grid_stats.inserted,
-                },
-                "gaps": gaps,
-            },
+            "grid": asdict(grid_info),
+            "metronome": {"mode": self.opts.metronome, "gaps": gaps},
             "lyrics": {
                 "source": lyrics.get("source"),
                 "offset": lyrics.get("offset", 0.0),

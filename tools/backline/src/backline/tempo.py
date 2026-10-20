@@ -156,3 +156,205 @@ def regularize(beats: Beats) -> tuple[Beats, GridStats]:
         ),
         GridStats(bpm=round(60.0 / quarter, 2), dropped=dropped, inserted=inserted),
     )
+
+
+# --- the grid a song is actually played to ------------------------------------------------
+
+GRID_MODES = ("auto", "straight", "tracked")
+# The tracker places beats on a 10 ms frame grid, so ±10 ms of residual is its own noise; a
+# straight fit is accepted when 95 % of confident beats are within 35 ms and none beyond 60 ms.
+STRAIGHT_P95_MS = 35.0
+STRAIGHT_MAX_MS = 60.0
+SMOOTH_WINDOW = 17  # beats; a local line through them removes the frame jitter, keeps the drift
+MIN_CONFIDENT = 16
+ACTIVE_BELOW_PEAK_DB = 20.0  # a beat with drums: within this of the song's loud drum beats
+
+
+@dataclass
+class GridInfo:
+    mode: str  # straight | tracked | manual
+    bpm: float
+    confident_beats: int
+    residual_p95_ms: float | None = None
+    residual_max_ms: float | None = None
+    dropped: int = 0
+    inserted: int = 0
+    reason: str | None = None  # why a straight grid was not used
+
+
+def beat_levels_db(audio_wav: Path, beats: Beats) -> np.ndarray:
+    """RMS level per beat of `audio_wav` (the drum stem), in dB."""
+    import soundfile as sf
+
+    audio, sr = sf.read(audio_wav, dtype="float32", always_2d=True)
+    mono = audio.mean(axis=1)
+    times = np.asarray(beats.beats, dtype=float)
+    if len(times) < 2:
+        return np.zeros(len(times))
+    edges = np.append(times, times[-1] + float(np.median(np.diff(times))))
+    idx = np.clip(np.round(edges * sr).astype(int), 0, len(mono))
+    rms = np.array(
+        [
+            np.sqrt(np.mean(mono[a:b] ** 2)) if b > a else 0.0
+            for a, b in zip(idx[:-1], idx[1:], strict=True)
+        ]
+    )
+    return 20 * np.log10(rms + 1e-9)
+
+
+def confident_mask(beats: Beats, levels_db: np.ndarray) -> np.ndarray:
+    """Beats the tracker can be trusted on: drums are playing and the neighbouring intervals are
+    regular. (Strummed intros and breaks are where trackers follow the wrong thing.)"""
+    times = np.asarray(beats.beats, dtype=float)
+    if len(times) < 3:
+        return np.zeros(len(times), dtype=bool)
+    active = levels_db > np.percentile(levels_db, 75) - ACTIVE_BELOW_PEAK_DB
+    d = np.diff(times)
+    ok = np.abs(d / np.median(d) - 1) < 0.12
+    regular = np.r_[ok, True] & np.r_[True, ok]
+    return active & regular
+
+
+def choose_grid(
+    beats: Beats,
+    drums_wav: Path,
+    duration: float,
+    *,
+    mode: str = "auto",
+    bpm: float | None = None,
+) -> tuple[Beats, GridInfo]:
+    """The beat grid everything else uses.
+
+    Studio recordings are played to a click: one tempo fits every drummed beat within a few
+    milliseconds, and that line, extrapolated, is also right through the intro and the breaks
+    where the tracker loses its way. When the fit is not tight (a drifting or tempo-changing
+    recording) the cleaned tracked grid is used instead.
+    """
+    if mode not in GRID_MODES:
+        raise ValueError(f"grid mode must be one of {GRID_MODES}, got {mode!r}")
+    tracked, stats = regularize(beats)
+    levels = beat_levels_db(drums_wav, tracked)
+    conf = confident_mask(tracked, levels)
+    times = np.asarray(tracked.beats, dtype=float)
+    k = np.arange(len(times))
+
+    if bpm:
+        period = 60.0 / bpm
+        anchor = times[conf] - k[conf] * period if conf.any() else times[:1]
+        t0 = float(np.median(anchor))
+        grid = _straight(t0, period, duration, tracked, conf)
+        return grid, GridInfo("manual", round(bpm, 2), int(conf.sum()))
+
+    if mode == "tracked":
+        return smooth(tracked), GridInfo(
+            "tracked",
+            tracked.bpm,
+            int(conf.sum()),
+            None,
+            None,
+            stats.dropped,
+            stats.inserted,
+            "requested",
+        )
+
+    if conf.sum() < MIN_CONFIDENT:
+        reason = f"only {int(conf.sum())} confident beats"
+        if mode == "straight":
+            period = 60.0 / tracked.bpm
+            t0 = float(np.median(times - k * period))
+            return _straight(t0, period, duration, tracked, conf), GridInfo(
+                "straight", tracked.bpm, int(conf.sum()), reason=reason
+            )
+        return smooth(tracked), GridInfo(
+            "tracked",
+            tracked.bpm,
+            int(conf.sum()),
+            None,
+            None,
+            stats.dropped,
+            stats.inserted,
+            reason,
+        )
+
+    a = np.c_[np.ones(int(conf.sum())), k[conf]]
+    t0, period = np.linalg.lstsq(a, times[conf], rcond=None)[0]
+    residual = np.abs(times[conf] - (t0 + period * k[conf])) * 1000
+    p95, worst = float(np.percentile(residual, 95)), float(residual.max())
+    fitted_bpm = round(60.0 / period, 2)
+    tight = p95 <= STRAIGHT_P95_MS and worst <= STRAIGHT_MAX_MS
+    if tight or mode == "straight":
+        grid = _straight(float(t0), float(period), duration, tracked, conf)
+        return grid, GridInfo(
+            "straight",
+            fitted_bpm,
+            int(conf.sum()),
+            round(p95, 1),
+            round(worst, 1),
+            reason=None if tight else "forced",
+        )
+    return smooth(tracked), GridInfo(
+        "tracked",
+        tracked.bpm,
+        int(conf.sum()),
+        round(p95, 1),
+        round(worst, 1),
+        stats.dropped,
+        stats.inserted,
+        f"straight fit too loose (p95 {p95:.0f} ms, max {worst:.0f} ms)",
+    )
+
+
+def _straight(t0: float, period: float, duration: float, tracked: Beats, conf: np.ndarray) -> Beats:
+    """A regular grid at `period` through `t0`, covering the song, with bar lines phased to the
+    tracker's downbeats where it was confident."""
+    meter = max(1, tracked.meter)
+    k_min = int(np.ceil((0.0 - t0) / period))
+    k_max = int(np.floor((duration - t0) / period))
+    ks = np.arange(k_min, k_max + 1)
+    times = t0 + ks * period
+
+    votes: dict[int, int] = {}
+    tracked_times = np.asarray(tracked.beats, dtype=float)
+    confident_downbeats = [
+        d for d in tracked.downbeats if conf[int(np.argmin(np.abs(tracked_times - d)))]
+    ] or list(tracked.downbeats)
+    for d in confident_downbeats:
+        kd = int(round((d - t0) / period))
+        if abs(t0 + kd * period - d) <= 0.25 * period:
+            votes[kd % meter] = votes.get(kd % meter, 0) + 1
+    phase = max(votes, key=votes.get) if votes else (k_min % meter)
+    downbeats = [float(t) for kk, t in zip(ks, times, strict=True) if kk % meter == phase]
+    return Beats(
+        beats=[round(float(t), 4) for t in times],
+        downbeats=[round(t, 4) for t in downbeats],
+        bpm=round(60.0 / period, 2),
+        meter=meter,
+        source=tracked.source.replace("+regularized", "") + "+straight",
+    )
+
+
+def smooth(beats: Beats, window: int = SMOOTH_WINDOW) -> Beats:
+    """Each beat replaced by a local quadratic fit through its neighbours: the tempo drift of a
+    human recording survives (a quadratic follows accelerandos without bias), the tracker's
+    10 ms frame jitter does not."""
+    times = np.asarray(beats.beats, dtype=float)
+    n = len(times)
+    if n < window:
+        return beats
+    half = window // 2
+    out = np.empty(n)
+    k = np.arange(n, dtype=float)
+    for i in range(n):
+        lo, hi = max(0, i - half), min(n, i + half + 1)
+        out[i] = float(np.polyval(np.polyfit(k[lo:hi], times[lo:hi], 2), i))
+    downbeats = []
+    for d in beats.downbeats:
+        i = int(np.argmin(np.abs(times - d)))
+        downbeats.append(round(float(out[i]), 4))
+    return Beats(
+        beats=[round(float(t), 4) for t in out],
+        downbeats=sorted(set(downbeats)),
+        bpm=beats.bpm,
+        meter=beats.meter,
+        source=beats.source + "+smoothed",
+    )
