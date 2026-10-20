@@ -1,21 +1,42 @@
-# AGENTS.md
+# AGENTS.md — Backline
 
-Backing-track player with live lyrics for a band. One device (leader) plays the audio into the console; other phones follow the lyrics in real time. Vite 8 + vanilla TypeScript page, Cloudflare Worker + Durable Object + R2 backend. No framework, no unit tests, no lint config. `README.md` is accurate; read it for the user-facing workflow.
+One repo, two halves, one contract between them:
+
+- **Player** (repo root): Vite 8 + vanilla TypeScript page, Cloudflare Worker + Durable Object
+  + R2. The leader phone plays into the console; followers see the lyrics live. No framework,
+  no unit tests, no lint config; `scripts/browser-check.mjs` is the regression suite.
+- **Importer** (`tools/backline/`, Python 3.12, uv): `backline add <song>` → song folder.
+- **`tracks/<set>/<NN - Title>/`**: `Title.lrc`, `Title.wav` (drums, rendered by the user in
+  Reaper), `Title.reference.wav` (the original) — all on one timeline, count-in first.
+
+The name was Band Companion; the deployed worker (`wrangler.jsonc` `name`), the R2 bucket and
+the leader-key localStorage key keep that name on purpose (URL, uploaded audio, signed-in
+leaders). Everything else says Backline. `README.md` is accurate; read it for the workflow.
 
 ## Commands
 
-- `npm run dev` — Vite dev server; proxies `/audio` and `/ws` to `npm run dev:worker` (wrangler on 8787). Service worker is NOT active here.
-- `npm run dev:worker` — `wrangler dev` with local R2 and a local Durable Object. Fill local R2 with `npm run sync-audio -- --local` first.
-- `npm run typecheck` — `wrangler types` (generates the git-ignored `worker-configuration.d.ts`), then `tsc` for the page (`tsconfig.json`: `src`, `shared`) and the worker (`worker/tsconfig.json`). Run after any TS change.
-- `npm run build` — typecheck + `vite build`. `npm run preview` builds and serves `dist/` through the worker with the SW active; use it for caching, range requests, offline.
-- `npm run sync-audio` — hash WAVs, upload missing ones to R2, rewrite `tracks/audio.json`. `--local` targets the wrangler dev bucket. Exits without touching the manifest when no WAVs are present (CI).
-- `npm run deploy` — sync audio + build + `wrangler deploy`. Needs `wrangler login` and the bucket `band-companion-audio` to exist.
-- `node scripts/browser-check.mjs [url]` — headless Chrome run-through (leader, lyrics, followers, takeover, offline, tablet) against a running worker. Run it after UI or sync changes; it is the regression suite.
+`mise install` sets up both halves (node + python + uv + ffmpeg + yt-dlp, then `npm ci && uv sync`).
+The venv is activated on `cd`; `backline` is on PATH. `UV_PROJECT` points uv at `tools/backline`.
+
+- `mise run dev` — Vite dev server; proxies `/audio` and `/ws` to `mise run dev:worker` (wrangler on 8787). Service worker is NOT active here.
+- `mise run dev:worker` — `wrangler dev` with local R2 and a local Durable Object. Fill local R2 with `mise run sync-audio -- --local` first.
+- `mise run typecheck` — `wrangler types` (generates the git-ignored `worker-configuration.d.ts`), then `tsc` for the page (`tsconfig.json`: `src`, `shared`) and the worker (`worker/tsconfig.json`). Run after any TS change.
+- `mise run build` — typecheck + `vite build`. `mise run preview` builds and serves `dist/` through the worker with the SW active; use it for caching, range requests, offline.
+- `mise run sync-audio` — hash WAVs (main and `.reference.wav`), upload missing ones to R2, rewrite `tracks/audio.json`. `--local` targets the wrangler dev bucket. Exits without touching the manifest when no WAVs are present (CI).
+- `mise run deploy` — sync audio + build + `wrangler deploy`. Needs `wrangler login`.
+- `mise run check:browser` (`node scripts/browser-check.mjs [url]`) — headless Chrome run-through (leader, lyrics, reference, followers, takeover, offline, tablet) against a running preview. Run it after UI or sync changes.
+- `mise run test` / `mise run test:slow` / `mise run lint` / `mise run fmt` — the importer (pytest, ruff).
+- `backline add <file|url> [--set .. --number ..]`, `backline resimplify <job>`, `backline lyrics <job>`, `backline fx-template <RPP>`, `backline doctor`.
+
+The reference material: `https://www.youtube.com/watch?v=flr8vDQ9Wuc` (Juanes – Fotografía; music
+video 244 s vs 241 s album cut → lyrics offset +0.80 s is expected), job
+`~/Music/Backline/jobs/Juanes - Fotografia (4b74e33d)`, song folder `tracks/Cumple de Guille/02 - Fotografía`.
 
 ## Tracks
 
-- One folder per song: `tracks/<set>/<NN - Title>/` with one `.wav` (git-ignored) and optionally one `.lrc`/`.txt` (committed). Track id = folder path, used in the realtime protocol; renaming a folder changes the id.
-- `src/tracks.ts` reads `tracks/audio.json` for audio (`/audio/<hash>.wav`) and globs lyrics with `import.meta.glob(..., { query: '?raw' })`. A song needs an audio entry to be listed; lyrics without audio only warn.
+- One folder per song: `tracks/<set>/<NN - Title>/` with one `.wav` (git-ignored), optionally one `*.reference.wav` (git-ignored; the original on the same timeline) and optionally one `.lrc`/`.txt` (committed). Track id = folder path, used in the realtime protocol; renaming a folder changes the id.
+- `tracks/audio.json` entries: `{ key, bytes, source, uploaded, reference?: { key, bytes, source, uploaded } }`. `src/tracks.ts` reads it for audio (`/audio/<hash>.wav`) and globs lyrics with `import.meta.glob(..., { query: '?raw' })`. A song needs an audio entry to be listed; lyrics without audio only warn.
+- The `.lrc` is on the count-in timeline (countdown lines first). Never hand-edit timings to match a different render; regenerate with `backline resimplify`.
 - Audio never goes through the Vite build: Cloudflare rejects assets over 25 MB. Do not add audio globs or move audio into `public/`.
 - Unicode: macOS reports folder names as NFD, git (`core.precomposeunicode`) stores and checks them out as NFC. `sync-audio.mjs` and `tracks.ts` normalize every folder key to NFC; keep it that way or a fresh checkout pairs no lyrics with the audio. Compare titles with `.normalize('NFC')` in tests.
 
@@ -31,6 +52,7 @@ Backing-track player with live lyrics for a band. One device (leader) plays the 
 - Demotion must clear the key, otherwise two devices with the key would take turns demoting each other on reconnect.
 - `Broadcaster.sync()` runs on every player state change but only sends on track/playing changes or seeks (> 1 s from expected); a 2 s heartbeat covers drift. `Follower.now()` extrapolates on the local clock while `playing`.
 - `main.ts` mounts `UI` (leader) or `FollowUI` (follower) into `#app` and swaps them at runtime; `Player` and the `<audio>` element are created once.
+- `src/reference.ts` (leader's reference track) uses `<audio id="reference">`, locked to the main element's own `play`/`pause`/`seeking`/`timeupdate` events (drift > 50 ms → realign) and routed through an `AudioContext` → `MediaElementAudioSourceNode` → `GainNode`, because iOS ignores `audio.volume`. The graph is built once, inside the tap that turns the reference on (a MediaElementSource can only ever be attached once, and iOS needs the gesture); `main.ts` therefore creates one `Reference` for the page's lifetime. Mute = gain 0 with the element still playing, so unmute is instant. State (`enabled`, `muted`, `volume`) is in localStorage `backline:reference`. Off → nothing loaded, nothing downloaded; `offline.ts` includes references only when enabled.
 - `src/monitor.ts` (follower audio, "Muted / Listening" chip) uses the second `<audio id="monitor">`, never the leader's element. Off by default and loads nothing until toggled; `toggle()` must run inside the tap so iOS unlocks the element (`unlock()` does play+pause when there is nothing to play yet). It seeks on > 0.5 s drift from `Follower.now()`; the leader's 2 s heartbeat is what triggers corrections. Media-session handlers are claimed by whichever mode mounts (`Player.attachMediaSession()` vs `Monitor`).
 
 ## Offline / service worker
@@ -54,3 +76,74 @@ Backing-track player with live lyrics for a band. One device (leader) plays the 
 ## Verifying layouts without a device
 
 Plain `chrome --headless --screenshot` cannot do phone widths. `scripts/cdp.mjs` wraps the DevTools protocol (`Emulation.setDeviceMetricsOverride` with `mobile: true`, one browser context per simulated device so roles stay independent, `Network.emulateNetworkConditions` for offline). `scripts/browser-check.mjs` is the example to extend.
+
+## Importer (`tools/backline/`)
+
+```
+src/backline/
+  cli.py        typer: add / resimplify / lyrics / fx-template / doctor. Rich to stderr.
+  config.py     backline.toml (found upwards from cwd, else repo root); song_folder() numbering
+  pipeline.py   stages + per-job caching (_Runner), RunOptions/RunResult, output-folder resolution
+  job.py        job layout (input/ work/ output/ + <Title>.RPP), path constants, manifest
+  ingest.py     file or URL → input/original.wav (ffmpeg; yt-dlp subprocess for URLs)
+  separate.py   Demucs → work/drums.wav + work/vocals.wav (MPS, CPU fallback)
+  transcribe.py ADTOF → activations [frames, 5] @ 100 fps
+  tempo.py      Beat This! → beats/downbeats/bpm/meter
+  simplify.py   peaks → notes; PROFILES (conservative / daring thresholds)
+  lyrics.py / lrclib.py   identification, LRCLIB lookup + ranking, vocal-stem offset check, LRC I/O
+  midi_out.py   CountIn, TempoMap, Layout, build_sequence() → Sequence; write_midi()
+  reference.py  original + synthesized count-in clicks on the output timeline, 16-bit
+  reaper.py     project (stem muted L, MIDI centre + FX template, daring muted R, original muted),
+                markers, RENDER_* settings; extract_fx_chain(); is_generated()
+tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop; tests pass an explicit
+                Config so nothing ever lands in the real tracks/
+```
+
+Rules:
+
+- **Job layout is fixed**: `input/`, `work/`, `output/`, `<Title>.RPP` in the root, nothing else.
+  Relative paths are constants in `job.py` (`J.ORIGINAL`, `J.DRUMS`, …); never build `"work/..."`
+  strings elsewhere. Deliverables go to the song folder: `--to`, else `tracks/<set>/<NN - Title>`
+  from `backline.toml` (`song_folder()` reuses an existing folder with the same title,
+  accent-insensitively), else the job's `output/`. The resolved folder is saved in the job's
+  options so reruns land in the same place. MIDI files stay in the job's `output/`.
+- **Stages are cached per job.** Each `stage()` call passes its params and the artifacts it
+  produces; once a stage runs, every later stage runs too. New output file → add it to the
+  artifact list. Params must be JSON-round-trippable. `OUTPUT_FORMAT` is part of the output
+  stage's params: bump it when the output stage changes what it writes for the same inputs.
+- **One `Sequence`, every renderer.** `build_sequence()` is the single source of truth for ticks;
+  `write_midi()`, `reaper.py`, the `.lrc` files and `reference.py` all derive from the same
+  `Layout`. Never compute timing in a renderer.
+- **Song time vs output time.** `notes.json`, `beats.json`, `lyrics.json` are in song time; the
+  output stage adds `Layout.shift`. The count-in ends exactly on the first downbeat.
+- **Lyrics never fail the run**: a miss is written to `lyrics.json` (`found: false`) and cached.
+  Offsets ≥ 0.5 s against the vocal stem are applied; smaller ones only reported (LRC lines
+  are tagged a touch early by convention).
+- **Never overwrite a Reaper-saved project** (`project_target()`, header check) — regenerate
+  into `<Title>.new.RPP`. The FX template `~/.config/backline/midi-track.RfxChain` is injected
+  on both MIDI tracks with fresh `FXID`s; it is personal and lives outside the repo.
+- Heavy imports (torch, demucs, beat_this) stay inside functions.
+
+Dependency gotchas (already handled): `[tool.uv] environments` excludes Intel macOS or uv's
+universal lock downgrades torch/numpy for everyone; `adtof-pytorch` is a git dep pinned by
+commit, prints on load (wrapped), wants a `[1, T, 5]` batch, CPU only; torchaudio is frozen at
+2.11 while torch moves on, so audio I/O goes through soundfile/ffmpeg; LRCLIB 503s sporadically
+(retries); `HF_HUB_VERBOSITY=error` is set in `cli.main()` because huggingface_hub resets its
+logger on lazy import; MIDI lyric events are UTF-8.
+
+Reaper format (from projects saved by Reaper 7, locked by tests): `VOLPAN <vol> <pan> -1 -1 1`,
+`MUTESOLO <mute> 0 0`, in-project MIDI as `HASDATA 1 480 QN` + `E <delta> <status> <d1> <d2>` +
+final `E .. b0 7b 00`, `MARKER <n> <pos> "<text>" 0`, `RENDER_FILE/RENDER_PATTERN/RENDER_FMT 0 2
+44100/RENDER_RANGE 1 0 0 0 1000`, `<RENDER_CFG>` `ZXZhdxgAAQ==` = 24-bit WAV.
+
+Conventions: ruff (line length 100, E/F/I/UP/B; B008 ignored in cli.py), dataclasses for data,
+functions for stages, comments only where behaviour is not obvious. Commit after each working
+increment; imperative subject, body says why.
+
+## Status / next
+
+Done: merged repo; `backline add` with config, song folders, reference track, drums-only
+project; player reference track with live volume/mute; offline includes references when on.
+Open (see `docs/PLAN.md`): per-beat tempo map, quantized `essence`/`detailed` styles,
+`--bpm`/`--downbeat-offset`, Whisper fallback for lyrics, `--json` progress, followers hearing
+the reference, a `--render` flag driving Reaper's command-line renderer.

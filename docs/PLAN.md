@@ -1,4 +1,10 @@
-# drums2midi — Plan
+# Backline importer — design notes
+
+> Historical design document of the importer (born as `backline`, now `tools/backline/`).
+> `README.md` and `AGENTS.md` at the repo root are current; this file keeps the reasoning and
+> the roadmap.
+
+# backline — Plan
 
 A command-line tool: give it an audio file or a YouTube link → get a playable, simplified drum
 MIDI file (the "essence" of the groove, with a count-in) plus a Reaper project that loads it
@@ -30,13 +36,13 @@ convenience. Cleanup happens in Reaper.
 
 ```bash
 mise install          # Python 3.12, uv, ffmpeg, yt-dlp, then uv sync → .venv
-drums2midi doctor     # all green?
+backline doctor     # all green?
 ```
 
 `mise.toml`:
 - `[tools]` python 3.12, uv, ffmpeg 9 (conda-forge), yt-dlp (GitHub release binary).
 - `[env] UV_PYTHON_DOWNLOADS=never` — uv must use mise's Python.
-- `[settings] python.uv_venv_auto` — `.venv` is activated on `cd`, so `drums2midi` and `pytest`
+- `[settings] python.uv_venv_auto` — `.venv` is activated on `cd`, so `backline` and `pytest`
   are on PATH without `uv run`.
 - `[hooks] postinstall = "uv sync"`; `[tasks]` `sync`, `test`, `test-slow`, `lint`, `fmt`.
 
@@ -52,7 +58,7 @@ extract-drums/
 ├── mise.toml
 ├── pyproject.toml / uv.lock
 ├── PLAN.md / README.md
-├── src/drums2midi/
+├── src/backline/
 │   ├── cli.py          # run / resimplify / doctor (typer + rich)
 │   ├── job.py          # job folder, manifest, per-stage caching
 │   ├── ingest.py       # file or URL → original.wav (44.1 kHz stereo)
@@ -77,7 +83,7 @@ extract-drums/
 ## 4. CLI
 
 ```bash
-drums2midi run <file-or-url>
+backline run <file-or-url>
     [--out DIR]                        # default ~/Music/Drums2MIDI/<title> (<hash>)/
     [--style essence|detailed|raw]     # default essence
     [--grid 16|8|12|24]                # 16ths, 8ths, triplet 8ths, triplet 16ths
@@ -90,10 +96,10 @@ drums2midi run <file-or-url>
     [--keep-other]                     # also save the no_drums stem
     [--json]                           # JSON-lines progress on stdout (for scripting)
 
-drums2midi resimplify <job-dir> [--style …] [--grid …] [--count-in …] [--bpm …] …
+backline resimplify <job-dir> [--style …] [--grid …] [--count-in …] [--bpm …] …
     # reuses cached stems/activations; reruns tempo only if --bpm changed; instant otherwise
 
-drums2midi doctor
+backline doctor
     # ffmpeg, yt-dlp, torch + device, demucs, adtof, beat_this, cached weights
 ```
 
@@ -188,7 +194,7 @@ instrument once; it is remembered as a template.
   (`RENDER_FILE` = the output folder, `RENDER_PATTERN` = `<Title>`, 24-bit WAV, 44.1 kHz).
 - Track 1 "<title> (drums)": `drums.wav` at `shift`, hard left, −9 dB, **muted**.
 - Track 2 "<title> (MIDI conservative)": in-project MIDI at 0, **centre**, with the FX chain
-  from `~/.config/drums2midi/midi-track.RfxChain` if present (`drums2midi fx-template`).
+  from `~/.config/backline/midi-track.RfxChain` if present (`backline fx-template`).
 - Track 3 "<title> (MIDI daring)": same, hard right, muted, same FX chain (fresh `FXID`).
 - Track 4 "<title> (original)": `original.wav` at `shift`, pan +0.6, −16 dB, on.
 - One `MARKER` per lyric line. Events embedded in Reaper's `E <delta> <status> <d1> <d2>` format
@@ -223,7 +229,7 @@ Goal: a line-timed `lyrics.lrc` for Band Companion plus the same lines in Reaper
    count-in click, then the song, `[length:]` includes the count-in) and `lyrics-original.lrc`
    in song time for the untouched `original.wav`; plus a Reaper **marker per line** in
    `project.RPP` and **lyric meta-events** (FF 05, UTF-8) in both `.mid` files. A miss is also written to `lyrics.json` so the stage caches like the rest;
-   `drums2midi lyrics <job-dir>` redoes only this stage with the job's saved options.
+   `backline lyrics <job-dir>` redoes only this stage with the job's saved options.
 
 Later: Whisper (`mlx-whisper`) on the vocals stem for songs LRCLIB doesn't have.
 
@@ -266,7 +272,7 @@ explicitly. Nothing is written to the job root except the project file.
 
 | # | Deliverable | Done when |
 |---|---|---|
-| M0 ✅ | Tooling | `mise install` from a clean clone → `drums2midi doctor` all green. |
+| M0 ✅ | Tooling | `mise install` from a clean clone → `backline doctor` all green. |
 | M1 ✅ | `run file.wav` → `drums.mid` (raw style, constant tempo, count-in) | Demucs runs on MPS here (weights download verified); loop tests pass; a real song opens in Reaper and grooves with the original. |
 | M1.5 ✅ | `project.RPP` (stem L / MIDI R / original muted), `daring` profile, YouTube URLs, lyrics | Reaper project verified by hand; two songs (file + URL) run end to end with lyrics. |
 | M2 | Tempo map, `essence`/`detailed`, `--bpm`/`--downbeat-offset` | Reaper's bar lines follow the song; switching style is instant. |
