@@ -212,10 +212,12 @@ Goal: a line-timed `lyrics.lrc` for Band Companion plus the same lines in Reaper
    disagreements are normal (No podrás: +0.28 suggested, ignored; Fotografía video vs album
    cut: +0.80 applied, correct). `--lyrics-offset` overrides. "On-vocal %" = share of lines
    whose start sits on sung audio (−0.15/+0.35 s window) — the reported confidence.
-4. **Outputs.** `lyrics.lrc` in song time (line-level, `[ar:][ti:][al:][length:]` header),
-   `lyrics.txt`, `lyrics.json` (hints, candidates, offset evidence, lines). In output time:
-   a Reaper **marker per line** in `project.RPP` and **lyric meta-events** (FF 05, UTF-8) in
-   both `.mid` files. A miss is also written to `lyrics.json` so the stage caches like the rest;
+4. **Outputs.** The lyrics stage writes `lyrics.json` (hints, candidates, offset evidence,
+   lines in song time) and `lyrics.txt`. The **output stage** writes the timed files, because
+   it knows the count-in shift: `lyrics.lrc` on the output timeline (a countdown line per
+   count-in click, then the song, `[length:]` includes the count-in) and `lyrics-original.lrc`
+   in song time for the untouched `original.wav`; plus a Reaper **marker per line** in
+   `project.RPP` and **lyric meta-events** (FF 05, UTF-8) in both `.mid` files. A miss is also written to `lyrics.json` so the stage caches like the rest;
    `drums2midi lyrics <job-dir>` redoes only this stage with the job's saved options.
 
 Later: Whisper (`mlx-whisper`) on the vocals stem for songs LRCLIB doesn't have.
@@ -233,7 +235,7 @@ Later: Whisper (`mlx-whisper`) on the vocals stem for songs LRCLIB doesn't have.
 ├── notes.json / notes-daring.json
 ├── drums.mid          ← the deliverable
 ├── drums-daring.mid
-├── lyrics.lrc / lyrics.txt / lyrics.json
+├── lyrics.lrc / lyrics-original.lrc / lyrics.txt / lyrics.json
 └── project.RPP
 ```
 

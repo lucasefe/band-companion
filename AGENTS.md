@@ -67,7 +67,12 @@ tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop with kn
 - **Lyrics stage never fails the run.** It always writes `lyrics.json` (`found: false` with a
   `reason`/`error` on a miss) so it caches like every other stage. It runs right before `output`
   so redoing lyrics does not rerun `simplify`. Lines are stored in song time
-  (`lines_song_time`); `output` adds `Layout.shift` for markers and MIDI lyric events.
+  (`lines_song_time`); the **output stage** writes every timed artifact — `lyrics.lrc`
+  (count-in timeline, countdown lines first), `lyrics-original.lrc` (song time), markers, MIDI
+  lyric events — because only it knows `Layout.shift`.
+- **`OUTPUT_FORMAT`** in `pipeline.py` is part of the output stage's cache params. Bump it
+  whenever the output stage starts writing different files or content for the same inputs,
+  otherwise existing jobs keep their stale outputs.
 - **Offset rule.** `estimate_offset()` applies a shift only if |shift| ≥ 0.5 s (gross mismatch);
   smaller suggestions are reported, not applied — LRC convention tags lines slightly early.
 - **Saved options.** `_Runner` writes `RunOptions` into `manifest.json["options"]`;

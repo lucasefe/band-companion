@@ -9,6 +9,7 @@ from drums2midi.lyrics import (
     Hints,
     Line,
     Lyrics,
+    countdown_lines,
     estimate_offset,
     format_lrc,
     hints_from_youtube,
@@ -41,15 +42,22 @@ def test_parse_lrc_handles_formats_blank_lines_and_repeats():
     assert untimed == ["Credits without a timestamp"], "header tags are not lyrics"
 
 
-def test_format_lrc_applies_offset_and_skips_blank_lines():
+def test_format_lrc_sorts_clamps_and_round_trips():
     ly = Lyrics(parse_lrc(LRC), source="file:x", synced=True, offset=1.5)
-    out = format_lrc(ly, header={"ar": "Cristian Castro", "ti": "No Podrás", "al": ""})
-    assert out.startswith("[ar:Cristian Castro]\n[ti:No Podrás]\n")
+    lines = [(ln.time + ly.offset, ln.text) for ln in ly.timed] + [(-0.3, "pickup")]
+    out = format_lrc(lines, header={"ar": "Cristian Castro", "ti": "No Podrás", "al": ""})
+    assert out.startswith("[ar:Cristian Castro]\n[ti:No Podrás]\n[00:00.00]pickup\n")
     assert "[00:18.99]Tal vez te olvides de mi" in out
-    assert "[00:35.36]" not in out, "blank timed lines are dropped"
+    assert "[00:35.36]" not in out, "blank timed lines are not in `timed`"
     assert "[01:08.70]Si estoy llorando" in out
-    assert parse_lrc(out)[0].time == pytest.approx(18.99)
-    assert "Credits" not in plain_text(ly) or "Credits" in plain_text(ly)  # untimed kept as text
+    assert parse_lrc(out)[1].time == pytest.approx(18.99)
+    assert "Credits without a timestamp" in plain_text(ly)
+
+
+def test_countdown_lines_tick_once_per_click():
+    lines = countdown_lines(0.0, bars=2, meter=4, seconds_per_beat=0.5)
+    assert [t for t, _ in lines] == [i * 0.5 for i in range(8)]
+    assert [text for _, text in lines] == ["1", "2", "3", "4", "1", "2", "3", "4"]
 
 
 @pytest.mark.parametrize(

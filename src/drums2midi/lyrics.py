@@ -75,14 +75,20 @@ def parse_lrc(text: str) -> list[Line]:
     return lines
 
 
-def format_lrc(lyrics: Lyrics, *, header: dict[str, str] | None = None) -> str:
+def format_lrc(lines: list[tuple[float, str]], *, header: dict[str, str] | None = None) -> str:
+    """Line-level LRC from (seconds, text) pairs; negative times are clamped to 0."""
     out = [f"[{k}:{v}]" for k, v in (header or {}).items() if v]
-    for ln in lyrics.timed:
-        t = ln.time + lyrics.offset
-        if t < 0:
-            t = 0.0
-        out.append(f"[{int(t // 60):02d}:{t % 60:05.2f}]{ln.text}")
+    for t, text in sorted(lines, key=lambda x: x[0]):
+        t = max(t, 0.0)
+        out.append(f"[{int(t // 60):02d}:{t % 60:05.2f}]{text}")
     return "\n".join(out) + "\n"
+
+
+def countdown_lines(
+    start: float, bars: int, meter: int, seconds_per_beat: float
+) -> list[tuple[float, str]]:
+    """One line per count-in click ("1", "2", …) so an LRC player ticks along with the clicks."""
+    return [(start + k * seconds_per_beat, str(k % meter + 1)) for k in range(bars * meter)]
 
 
 def plain_text(lyrics: Lyrics) -> str:

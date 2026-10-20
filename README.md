@@ -73,7 +73,8 @@ Supported inputs: wav, mp3, m4a, aac, flac, aiff, ogg, opus, or any URL `yt-dlp`
 ~/Music/Drums2MIDI/<title> (<hash>)/
 ├── drums.mid           the drums, conservative detection, with count-in   ← the deliverable
 ├── drums-daring.mid    same timeline, lower thresholds: more toms/cymbals/ghost notes
-├── lyrics.lrc          timed lyrics, song time, ready for an LRC player   ← the other deliverable
+├── lyrics.lrc          timed lyrics on the same timeline as the MIDI: countdown, then the song
+├── lyrics-original.lrc the same lines in song time, for the untouched original.wav
 ├── lyrics.txt / lyrics.json   plain text; where the lyrics came from and the timing evidence
 ├── project.RPP         Reaper project (see below)
 ├── original.wav        your song, 44.1 kHz stereo
@@ -114,7 +115,10 @@ account). Candidates are ranked by name similarity, duration and whether they ar
 The result is then checked against the isolated vocal stem: if the lines are grossly off (a
 music video with a longer intro than the album cut, for instance) a constant shift is applied
 automatically; small disagreements are left alone because LRC lines are conventionally tagged a
-touch early. `lyrics.json` shows what was considered and why. Lines also go into the Reaper
+touch early. `lyrics.json` shows what was considered and why. `lyrics.lrc` sits on the count-in timeline like
+everything else — it starts with the count-in as a visible countdown (`1 2 3 4`, one line per
+click) and then the song, so it pairs with a backing track that has the count-in;
+`lyrics-original.lrc` pairs with the untouched `original.wav`. Lines also go into the Reaper
 project as markers and into the `.mid` files as lyric events. Studio recordings only: the
 timing comes from a database, so a live or cover version will have the right words at the wrong
 times.

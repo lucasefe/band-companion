@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from drums2midi.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and drums.mid; other profiles get a suffix
+OUTPUT_FORMAT = 2  # bump when the output stage writes different files/content for the same inputs
 
 
 def notes_file(profile: str) -> str:
@@ -252,12 +253,12 @@ class _Runner:
             "count_in": opts.count_in,
             "count_in_note": opts.count_in_note,
             "tempo": "constant",
+            "format": OUTPUT_FORMAT,
         }
         seqs = {p: build_sequence(notes[p], beats, count_in=count_in) for p in PROFILES}
         layout = seqs[PRIMARY].layout
-        lyric_lines = [
-            (t + layout.shift, text) for t, text in lyrics_info.get("lines_song_time", [])
-        ]
+        song_lines = [(t, text) for t, text in lyrics_info.get("lines_song_time", [])]
+        lyric_lines = [(t + layout.shift, text) for t, text in song_lines]
 
         def do_output() -> dict:
             for profile, seq in seqs.items():
@@ -267,6 +268,7 @@ class _Runner:
                     track_name=f"{job.title} {profile}",
                     lyrics=lyric_lines,
                 )
+            self._write_lrc_files(lyrics_info, song_lines, lyric_lines, layout, count_in)
             duration = duration_seconds(job.path("original.wav"))
             write_rpp(
                 job.path("project.RPP"),
@@ -299,7 +301,7 @@ class _Runner:
             )
             return {"shift": layout.shift, "count_in_seconds": layout.count_in_seconds}
 
-        self.stage("output", output_params, do_output, detail="drums.mid + project.RPP")
+        self.stage("output", output_params, do_output, detail="midi + lrc + rpp")
 
         return RunResult(
             job=job,
@@ -314,14 +316,14 @@ class _Runner:
         )
 
     def _do_lyrics(self) -> dict:
-        """Find lyrics, check their timing against the vocal stem, write lyrics.{json,lrc,txt}.
+        """Find lyrics, check their timing against the vocal stem, write lyrics.{json,txt}.
 
+        The .lrc files are written by the output stage, which knows the count-in shift.
         Never raises: a miss is recorded in lyrics.json so the stage is cached like any other.
         """
         from drums2midi.audio import duration_seconds
         from drums2midi.lyrics import (
             estimate_offset,
-            format_lrc,
             hints_from_file,
             hints_from_youtube,
             lyrics_from_file,
@@ -332,8 +334,7 @@ class _Runner:
         )
 
         job, opts = self.job, self.opts
-        for stale in ("lyrics.lrc", "lyrics.txt"):
-            job.path(stale).unlink(missing_ok=True)
+        job.path("lyrics.txt").unlink(missing_ok=True)
         payload: dict[str, Any] = {"found": False, "lines_song_time": []}
         if not opts.lyrics:
             payload["reason"] = "disabled"
@@ -384,21 +385,16 @@ class _Runner:
                     "source": "vocal stem",
                 }
 
-        header = {
-            "ar": lyrics.meta.get("artist") or hints.artist or "",
-            "ti": lyrics.meta.get("title") or hints.title or "",
-            "al": lyrics.meta.get("album") or "",
-            "length": f"{int(duration // 60):02d}:{int(duration % 60):02d}",
-            "re": "drums2midi",
-        }
-        if lyrics.synced:
-            job.path("lyrics.lrc").write_text(format_lrc(lyrics, header=header), encoding="utf-8")
         job.path("lyrics.txt").write_text(plain_text(lyrics), encoding="utf-8")
-
         payload.update(
             {
                 "found": True,
                 "lyrics": lyrics_to_dict(lyrics),
+                "header": {
+                    "ar": lyrics.meta.get("artist") or hints.artist or "",
+                    "ti": lyrics.meta.get("title") or hints.title or "",
+                    "al": lyrics.meta.get("album") or "",
+                },
                 "lines_song_time": [[ln.time + lyrics.offset, ln.text] for ln in lyrics.timed],
             }
         )
@@ -407,6 +403,45 @@ class _Runner:
         who = f"{lyrics.meta.get('artist', '?')} – {lyrics.meta.get('title', '?')}"
         kind = f"{len(lyrics.timed)} lines" if lyrics.synced else "text only"
         return {"detail": f"{who} · {kind}", "source": lyrics.source}
+
+    def _write_lrc_files(self, lyrics_info, song_lines, lyric_lines, layout, count_in) -> None:
+        """lyrics.lrc on the count-in timeline (with a visible countdown), lyrics-original.lrc
+        in song time for the untouched original.wav."""
+        from drums2midi.audio import duration_seconds
+        from drums2midi.lyrics import countdown_lines, format_lrc
+
+        job = self.job
+        for name in ("lyrics.lrc", "lyrics-original.lrc"):
+            job.path(name).unlink(missing_ok=True)
+        if not song_lines:
+            return
+
+        meta = lyrics_info.get("lyrics", {}).get("meta", {})
+        base = lyrics_info.get("header") or {
+            "ar": meta.get("artist", ""),
+            "ti": meta.get("title", ""),
+            "al": meta.get("album", ""),
+        }
+
+        def header(total_seconds: float) -> dict[str, str]:
+            return dict(base) | {
+                "length": f"{int(total_seconds // 60):02d}:{int(total_seconds % 60):02d}",
+                "re": "drums2midi",
+            }
+
+        duration = duration_seconds(job.path("original.wav"))
+        countdown = (
+            countdown_lines(layout.count_in_start, count_in.bars, layout.meter, 60.0 / layout.bpm)
+            if count_in
+            else []
+        )
+        job.path("lyrics.lrc").write_text(
+            format_lrc(countdown + lyric_lines, header=header(layout.shift + duration)),
+            encoding="utf-8",
+        )
+        job.path("lyrics-original.lrc").write_text(
+            format_lrc(song_lines, header=header(duration)), encoding="utf-8"
+        )
 
 
 def _write_lyrics_json(job: Job, payload: dict[str, Any]) -> None:
