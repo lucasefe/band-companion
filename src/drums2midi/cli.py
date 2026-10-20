@@ -156,7 +156,6 @@ class RichReporter:
 
 def _print_summary(result) -> None:
     job, beats, layout = result.job, result.beats, result.layout
-    counts = "  ".join(f"{k} {v}" for k, v in result.counts.items())
     table = Table(show_header=False, box=None, pad_edge=False)
     table.add_column(style="bold")
     table.add_column(overflow="fold")
@@ -165,7 +164,8 @@ def _print_summary(result) -> None:
         "tempo",
         f"{beats.bpm:g} bpm, {beats.meter}/4, first downbeat at {beats.first_downbeat:.2f}s",
     )
-    table.add_row("hits", counts)
+    for profile, counts in result.counts.items():
+        table.add_row(profile, "  ".join(f"{k} {v}" for k, v in counts.items()))
     if layout.count_in_seconds:
         table.add_row(
             "count-in",

@@ -20,22 +20,33 @@ class AudioTrack:
     muted: bool = False
 
 
+@dataclass
+class MidiTrack:
+    name: str
+    item_name: str
+    seq: Sequence
+    pan: float = 0.0
+    muted: bool = False
+
+
 def write_rpp(
     path: Path,
     *,
-    title: str,
-    seq: Sequence,
     stem: AudioTrack,
+    midi: list[MidiTrack],
     original: AudioTrack | None = None,
 ) -> None:
     """Reaper project: drum stem panned left, MIDI panned right, same timeline as drums.mid."""
-    bpm, meter = seq.layout.bpm, seq.layout.meter
+    if not midi:
+        raise ValueError("at least one MIDI track is required")
+    bpm, meter = midi[0].seq.layout.bpm, midi[0].seq.layout.meter
     lines: list[str] = [
         '<REAPER_PROJECT 0.1 "7.0/drums2midi" 0',
         f"  TEMPO {_num(bpm)} {meter} 4",
     ]
     lines += _audio_track(stem)
-    lines += _midi_track(f"{title} (MIDI)", title, seq, pan=1.0)
+    for m in midi:
+        lines += _midi_track(m)
     if original is not None:
         lines += _audio_track(original)
     lines.append(">")
@@ -65,20 +76,21 @@ def _audio_track(t: AudioTrack) -> list[str]:
     ]
 
 
-def _midi_track(name: str, item_name: str, seq: Sequence, *, pan: float) -> list[str]:
+def _midi_track(m: MidiTrack) -> list[str]:
     guid = _guid()
+    seq = m.seq
     bpm, meter = seq.layout.bpm, seq.layout.meter
     lines = [
         f"  <TRACK {guid}",
-        f"    NAME {_quote(name)}",
-        f"    VOLPAN 1 {_num(pan)} -1 -1 1",
-        "    MUTESOLO 0 0 0",
+        f"    NAME {_quote(m.name)}",
+        f"    VOLPAN 1 {_num(m.pan)} -1 -1 1",
+        f"    MUTESOLO {int(m.muted)} 0 0",
         f"    TRACKID {guid}",
         "    <ITEM",
         "      POSITION 0",
         f"      LENGTH {_num(seq.tempo_map.seconds(seq.end_tick))}",
         "      LOOP 0",
-        f"      NAME {_quote(item_name)}",
+        f"      NAME {_quote(m.item_name)}",
         f"      IGUID {_guid()}",
         f"      GUID {_guid()}",
         "      <SOURCE MIDI",

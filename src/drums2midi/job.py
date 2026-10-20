@@ -18,8 +18,8 @@ ARTIFACTS: dict[str, tuple[str, ...]] = {
     "separate": ("drums.wav",),
     "transcribe": ("activations.npy",),
     "tempo": ("beats.json",),
-    "simplify": ("notes.json",),
-    "output": ("drums.mid", "project.RPP"),
+    "simplify": ("notes.json", "notes-daring.json"),
+    "output": ("drums.mid", "drums-daring.mid", "project.RPP"),
 }
 
 

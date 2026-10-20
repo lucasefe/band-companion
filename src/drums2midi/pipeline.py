@@ -7,6 +7,16 @@ from typing import Any, Protocol
 
 from drums2midi.job import DEFAULT_ROOT, Job, source_hash
 
+PRIMARY = "conservative"  # the unmuted MIDI track and drums.mid; other profiles get a suffix
+
+
+def notes_file(profile: str) -> str:
+    return "notes.json" if profile == PRIMARY else f"notes-{profile}.json"
+
+
+def midi_file(profile: str) -> str:
+    return "drums.mid" if profile == PRIMARY else f"drums-{profile}.mid"
+
 
 @dataclass
 class RunOptions:
@@ -44,7 +54,7 @@ class RunResult:
     layout: Any
     midi_path: Path
     rpp_path: Path
-    counts: dict[str, int]
+    counts: dict[str, dict[str, int]]  # profile -> class -> hits
     timings: dict[str, float] = field(default_factory=dict)
 
 
@@ -99,9 +109,15 @@ class _Runner:
     def process(self) -> RunResult:
         from drums2midi.audio import duration_seconds
         from drums2midi.midi_out import CountIn, build_sequence, write_midi
-        from drums2midi.reaper import STEM_VOLUME_DB, AudioTrack, write_rpp
+        from drums2midi.reaper import STEM_VOLUME_DB, AudioTrack, MidiTrack, write_rpp
         from drums2midi.separate import MODELS, separate
-        from drums2midi.simplify import count_by_class, load_notes, save_notes, simplify
+        from drums2midi.simplify import (
+            PROFILES,
+            count_by_class,
+            load_notes,
+            save_notes,
+            simplify,
+        )
         from drums2midi.tempo import Beats, detect_beats
         from drums2midi.transcribe import load_activations, transcribe
 
@@ -138,19 +154,31 @@ class _Runner:
         beats = Beats.load(job.path("beats.json"))
 
         def do_simplify() -> dict:
-            notes = simplify(
-                load_activations(job.path("activations.npy")),
-                beats,
-                style=opts.style,
-                grid=opts.grid,
-            )
-            save_notes(job.path("notes.json"), notes, {"style": opts.style, "grid": opts.grid})
-            return {"counts": count_by_class(notes)}
+            activations = load_activations(job.path("activations.npy"))
+            counts = {}
+            for profile, thresholds in PROFILES.items():
+                notes = simplify(
+                    activations, beats, style=opts.style, grid=opts.grid, thresholds=thresholds
+                )
+                save_notes(
+                    job.path(notes_file(profile)),
+                    notes,
+                    {"style": opts.style, "grid": opts.grid, "profile": profile},
+                )
+                counts[profile] = count_by_class(notes)
+            return {"counts": counts}
 
         self.stage(
-            "simplify", {"style": opts.style, "grid": opts.grid}, do_simplify, detail=opts.style
+            "simplify",
+            {
+                "style": opts.style,
+                "grid": opts.grid,
+                "profiles": {p: list(t) for p, t in PROFILES.items()},
+            },
+            do_simplify,
+            detail=opts.style,
         )
-        notes = load_notes(job.path("notes.json"))
+        notes = {p: load_notes(job.path(notes_file(p))) for p in PROFILES}
 
         count_in = (
             CountIn(bars=opts.count_in, note=opts.count_in_note) if opts.count_in > 0 else None
@@ -160,42 +188,52 @@ class _Runner:
             "count_in_note": opts.count_in_note,
             "tempo": "constant",
         }
-        seq = build_sequence(notes, beats, count_in=count_in)
+        seqs = {p: build_sequence(notes[p], beats, count_in=count_in) for p in PROFILES}
+        layout = seqs[PRIMARY].layout
 
         def do_output() -> dict:
-            write_midi(job.path("drums.mid"), seq, track_name=job.title)
+            for profile, seq in seqs.items():
+                write_midi(job.path(midi_file(profile)), seq, track_name=f"{job.title} {profile}")
             duration = duration_seconds(job.path("original.wav"))
             write_rpp(
                 job.path("project.RPP"),
-                title=job.title,
-                seq=seq,
                 stem=AudioTrack(
                     name=f"{job.title} (drums)",
                     file="drums.wav",
                     duration=duration,
-                    position=seq.layout.shift,
+                    position=layout.shift,
                     pan=-1.0,
                     volume_db=STEM_VOLUME_DB,
                 ),
+                midi=[
+                    MidiTrack(
+                        name=f"{job.title} (MIDI {profile})",
+                        item_name=f"{job.title} {profile}",
+                        seq=seq,
+                        pan=1.0,
+                        muted=profile != PRIMARY,
+                    )
+                    for profile, seq in seqs.items()
+                ],
                 original=AudioTrack(
                     name=f"{job.title} (original)",
                     file="original.wav",
                     duration=duration,
-                    position=seq.layout.shift,
+                    position=layout.shift,
                     muted=True,
                 ),
             )
-            return {"shift": seq.layout.shift, "count_in_seconds": seq.layout.count_in_seconds}
+            return {"shift": layout.shift, "count_in_seconds": layout.count_in_seconds}
 
         self.stage("output", output_params, do_output, detail="drums.mid + project.RPP")
 
         return RunResult(
             job=job,
             beats=beats,
-            notes=notes,
-            layout=seq.layout,
-            midi_path=job.path("drums.mid"),
+            notes=notes[PRIMARY],
+            layout=layout,
+            midi_path=job.path(midi_file(PRIMARY)),
             rpp_path=job.path("project.RPP"),
-            counts=count_by_class(notes),
+            counts={p: count_by_class(n) for p, n in notes.items()},
             timings=self.timings,
         )

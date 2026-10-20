@@ -17,6 +17,14 @@ GRIDS = (8, 16, 12, 24)
 # ADTOF merges all toms and all cymbals and has no open hi-hat class.
 GM_NOTES = {"kick": 36, "snare": 38, "tom": 45, "hihat": 42, "cymbal": 49}
 
+# Peak-picking thresholds per class (kick, snare, tom, hihat, cymbal).
+# "conservative" is ADTOF's tuning (few false positives); "daring" trades precision for recall,
+# most aggressively on toms and cymbals, where the conservative setting misses the most.
+PROFILES: dict[str, tuple[float, ...]] = {
+    "conservative": DEFAULT_THRESHOLDS,
+    "daring": (0.12, 0.10, 0.08, 0.12, 0.08),
+}
+
 
 @dataclass
 class Hit:
@@ -56,17 +64,22 @@ def pick_hits(
 
 
 def simplify(
-    activations: np.ndarray, beats: Beats, *, style: str = "raw", grid: int = 16
+    activations: np.ndarray,
+    beats: Beats,
+    *,
+    style: str = "raw",
+    grid: int = 16,
+    thresholds: tuple[float, ...] = DEFAULT_THRESHOLDS,
 ) -> list[Note]:
     if style == "raw":
-        return _raw(pick_hits(activations))
+        return _raw(pick_hits(activations, thresholds), thresholds)
     raise NotImplementedError(f"style {style!r} is not implemented yet")
 
 
-def _raw(hits: list[Hit]) -> list[Note]:
+def _raw(hits: list[Hit], thresholds: tuple[float, ...]) -> list[Note]:
     notes = []
     for h in hits:
-        threshold = DEFAULT_THRESHOLDS[CLASSES.index(h.cls)]
+        threshold = thresholds[CLASSES.index(h.cls)]
         velocity = _velocity_from_confidence(h.confidence, threshold)
         notes.append(
             Note(round(h.time, 4), h.cls, GM_NOTES[h.cls], velocity, round(h.confidence, 3))

@@ -16,12 +16,17 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
         "activations.npy",
         "beats.json",
         "notes.json",
+        "notes-daring.json",
         "drums.mid",
+        "drums-daring.mid",
+        "project.RPP",
     ):
         assert result.job.path(name).exists(), name
-    assert result.counts["kick"] >= 6
-    assert result.counts["snare"] >= 6
-    assert result.counts["hihat"] >= 20
+    conservative, daring = result.counts["conservative"], result.counts["daring"]
+    assert conservative["kick"] >= 6
+    assert conservative["snare"] >= 6
+    assert conservative["hihat"] >= 20
+    assert all(daring[c] >= conservative[c] for c in conservative), "daring is a superset"
     assert abs(result.beats.bpm - 100) <= 1
     assert set(result.timings) == {
         "ingest",
