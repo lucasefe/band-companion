@@ -1,10 +1,17 @@
 {
   "Cumple de Guille/01 - No podrás": {
-    "key": "d0765fd30c0f01fd.wav",
-    "bytes": 42857724,
+    "key": "7e02c8d3ed43f78c.wav",
+    "bytes": 42853642,
     "source": "NoPodras.wav",
     "uploaded": [
-      "local",
+      "remote"
+    ]
+  },
+  "Cumple de Guille/02 - Fotografía": {
+    "key": "7e0afa42a179372a.wav",
+    "bytes": 65838636,
+    "source": "Fotografia.wav",
+    "uploaded": [
       "remote"
     ]
   }
