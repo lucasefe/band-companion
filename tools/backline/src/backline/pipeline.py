@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import time
 from collections.abc import Callable
@@ -166,6 +167,67 @@ def redo_lyrics(
     job = Job.open(job_dir)
     opts = options_from_job(job, **overrides)
     return _Runner(job, opts, reporter or NullReporter(), rerun={"lyrics"}, config=config).process()
+
+
+def rename(
+    job_dir: Path,
+    *,
+    title: str | None = None,
+    artist: str | None = None,
+    reporter: Reporter | None = None,
+    config: Config | None = None,
+) -> RunResult:
+    """Fix a song's title/artist everywhere: job folder, project, song folder and its files.
+
+    Rendered audio is renamed too, so nothing needs re-rendering. Outputs are then regenerated
+    so the project, the lyrics header and backline.json carry the new name.
+    """
+    from backline.job import sanitize_name
+
+    job = Job.open(job_dir)
+    old_stem = job.file_stem
+    job.manifest["song"] = {
+        "artist": artist if artist is not None else job.artist,
+        "title": title or job.title,
+    }
+    new_stem = job.file_stem
+    job.save()
+
+    # Project files keep working under the new name; the output stage refreshes their contents.
+    for suffix in (".RPP", ".new.RPP"):
+        old_path = job.dir / f"{old_stem}{suffix}"
+        if old_path.exists() and new_stem != old_stem:
+            old_path.rename(job.dir / f"{new_stem}{suffix}")
+
+    # Song folder: keep its number, rename the folder and the deliverables inside it.
+    saved = job.manifest.get("options", {})
+    folder = Path(saved["deliver_to"]) if saved.get("deliver_to") else None
+    if folder and folder.is_dir() and new_stem != old_stem:
+        for ext in (".lrc", ".wav", ".reference.wav", ".mid"):
+            src = folder / f"{old_stem}{ext}"
+            if src.exists():
+                src.rename(folder / f"{new_stem}{ext}")
+        m = re.match(r"^(\s*\d+\s*[-._)]\s*)", folder.name)
+        prefix = m.group(1) if m else ""
+        target = folder.with_name(f"{prefix}{sanitize_name(job.title)}")
+        if target != folder and not target.exists():
+            folder.rename(target)
+            folder = target
+        job.manifest["options"]["deliver_to"] = str(folder)
+        job.save()
+    for ext in (".mid",):
+        for old_file in job.path(J.OUTPUT).glob(f"{old_stem}*{ext}"):
+            old_file.rename(old_file.with_name(old_file.name.replace(old_stem, new_stem, 1)))
+
+    # The job folder itself.
+    name = f"{job.artist} - {job.title}" if job.artist else job.title
+    new_dir = job.dir.with_name(f"{sanitize_name(name)} ({job.manifest['hash']})")
+    if new_dir != job.dir and not new_dir.exists():
+        job.dir.rename(new_dir)
+        job = Job.open(new_dir)
+
+    opts = options_from_job(job, deliver_to=job.manifest["options"].get("deliver_to"))
+    return _Runner(job, opts, reporter or NullReporter(), rerun={"output"}, config=config).process()
 
 
 def options_from_job(job: Job, **overrides: Any) -> RunOptions:

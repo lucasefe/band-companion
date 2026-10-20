@@ -115,7 +115,7 @@ def split_artist_title(name: str) -> tuple[str | None, str]:
     """'Juanes - Fotografia ft. Nelly Furtado (Official Video)' → ('Juanes', 'Fotografia')."""
     s = _VIDEO_NOISE.sub("", _TRACK_NO.sub("", name)).strip()
     s = re.sub(r"\s*\|.*$", "", s)
-    parts = [p.strip() for p in re.split(r"\s+[-–—]\s+", s) if p.strip()]
+    parts = [p.strip() for p in re.split(r"\s+(?:[-–—]|//)\s+", s) if p.strip()]
     parts = [p for p in parts if not _NOISE_SEGMENT.match(p)] or parts[:1]
     artist: str | None = None
     if len(parts) >= 2:

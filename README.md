@@ -80,13 +80,20 @@ backline add <audio-file | URL> [--set "Cumple de Guille"] [--number 3]
 --quality fast|best   Demucs htdemucs (default) or htdemucs_ft (~4× slower)
 --force               ignore the cache and rerun every stage
 
-backline resimplify <job> [--count-in 0 …]   regenerate the outputs from the cached analysis
+backline resimplify <job> [--count-in 0 … --metronome always]   regenerate the outputs from the cached analysis
 backline lyrics <job> [--artist … --title … --offset …]   redo only the lyrics
+backline rename <job> --title … [--artist …]  fix the name everywhere: job, project, song folder, files (render included)
 backline fx-template <Title.RPP>              remember your drum VSTi
 backline doctor
 ```
 
 Inputs: wav, mp3, m4a, aac, flac, aiff, ogg, opus, or any URL `yt-dlp` understands.
+
+Got the name wrong? `backline rename <job> --title "Ironic"` renames the job, the project, the
+song folder (keeping its number) and every file in it — the rendered `.wav` included — and
+regenerates the outputs, so nothing needs re-rendering. Lyrics not found or wrong?
+`backline lyrics <job> --artist … --title …` redoes only the lookup; `--offset -0.3` shifts
+them by hand.
 
 ### The job folder
 

@@ -155,6 +155,26 @@ def resimplify(
     )
 
 
+@app.command()
+def rename(
+    job_dir: Path = typer.Argument(..., help="An existing job folder."),
+    title: str | None = typer.Option(None, help="The song's title."),
+    artist: str | None = typer.Option(None, help="The artist."),
+) -> None:
+    """Fix a song's title/artist: renames the job, the project, the song folder and its files
+    (rendered audio included) and regenerates the outputs under the new name."""
+    from backline.pipeline import rename as rename_pipeline
+
+    if title is None and artist is None:
+        console.print("[red]error:[/] give --title and/or --artist")
+        raise typer.Exit(code=2)
+    _execute(
+        lambda reporter: rename_pipeline(
+            job_dir.expanduser(), title=title, artist=artist, reporter=reporter
+        )
+    )
+
+
 @app.command(name="lyrics")
 def lyrics_cmd(
     job_dir: Path = typer.Argument(..., help="An existing job folder."),

@@ -26,7 +26,7 @@ The venv is activated on `cd`; `backline` is on PATH. `UV_PROJECT` points uv at 
 - `mise run deploy` — sync audio + build + `wrangler deploy`. Needs `wrangler login`.
 - `mise run check:browser` (`node scripts/browser-check.mjs [url]`) — headless Chrome run-through (leader, lyrics, reference, followers, takeover, offline, tablet) against a running preview. Run it after UI or sync changes. It derives its lyric/title expectations from the first song folder in `tracks/`, so it follows the set list; it needs the local R2 filled (`mise run sync-audio -- --local`).
 - `mise run test` / `mise run test:slow` / `mise run lint` / `mise run fmt` — the importer (pytest, ruff).
-- `backline add <file|url> [--set .. --number ..]`, `backline resimplify <job>`, `backline lyrics <job>`, `backline fx-template <RPP>`, `backline doctor`.
+- `backline add <file|url> [--set .. --number ..]`, `backline resimplify <job>`, `backline lyrics <job>`, `backline rename <job> --title/--artist` (job dir, project, song folder + files incl. the render, then reruns output), `backline fx-template <RPP>`, `backline doctor`.
 
 The reference material: `https://www.youtube.com/watch?v=flr8vDQ9Wuc` (Juanes – Fotografía; music
 video 244 s vs 241 s album cut → lyrics offset +0.80 s is expected), job
@@ -82,7 +82,7 @@ Plain `chrome --headless --screenshot` cannot do phone widths. `scripts/cdp.mjs`
 
 ```
 src/backline/
-  cli.py        typer: add / resimplify / lyrics / fx-template / doctor. Rich to stderr.
+  cli.py        typer: add / resimplify / lyrics / rename / fx-template / doctor. Rich to stderr.
   config.py     backline.toml (found upwards from cwd, else repo root); song_folder() numbering
   catalog.py    backline.json per song folder: write_record(), find_by_hash() for dedupe
   pipeline.py   stages + per-job caching (_Runner), RunOptions/RunResult, output-folder resolution

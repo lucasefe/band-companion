@@ -143,3 +143,37 @@ def test_song_folder_comes_from_the_config(loop_wav: Path, tmp_path: Path):
     assert not (tracks / "Other").exists()
     assert again.job.dir == result.job.dir, "the hash identifies the job"
     assert set(again.timings) <= {"lyrics", "output"}, "a new --title only re-triggers the lyrics"
+
+
+@pytest.mark.slow
+def test_rename_moves_everything_and_keeps_the_render(loop_wav: Path, tmp_path: Path):
+    from backline.pipeline import rename
+
+    tracks = tmp_path / "tracks"
+    cfg = _config(tmp_path, tracks=tracks, default_set="Gig")
+    result = run(
+        str(loop_wav), RunOptions(out_root=cfg.jobs, device="cpu", lyrics=False), config=cfg
+    )
+    folder = result.output_dir
+    assert folder == tracks / "Gig" / "01 - loop"
+    (folder / "loop.wav").write_bytes(b"RIFF-fake-render")  # as if rendered from Reaper
+    old_job = result.job.dir
+
+    renamed = rename(old_job, title="Loop Song", artist="The Fixtures", config=cfg)
+    job = renamed.job
+    hash_part = old_job.name.split("(")[1]
+    assert job.dir == cfg.jobs / f"The Fixtures - Loop Song ({hash_part}"
+    assert not old_job.exists()
+    assert job.project_path == job.dir / "Loop Song.RPP" and job.project_path.exists()
+    assert not (job.dir / "loop.RPP").exists()
+
+    new_folder = tracks / "Gig" / "01 - Loop Song"
+    assert renamed.output_dir == new_folder and not folder.exists()
+    assert (new_folder / "Loop Song.wav").read_bytes() == b"RIFF-fake-render", "render kept"
+    assert (new_folder / "Loop Song.reference.wav").exists()
+    assert not (new_folder / "loop.reference.wav").exists()
+    assert (job.dir / "output" / "Loop Song.mid").exists()
+    record = json.loads((new_folder / "backline.json").read_text())
+    assert record["song"] == {"artist": "The Fixtures", "title": "Loop Song"}
+    assert 'RENDER_PATTERN "Loop Song"' in job.project_path.read_text()
+    assert set(renamed.timings) == {"output"}
