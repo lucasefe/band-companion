@@ -152,6 +152,46 @@ def lyrics_cmd(
     )
 
 
+@app.command(name="fx-template")
+def fx_template(
+    project: Path | None = typer.Argument(
+        None, help="A Reaper project (.RPP or .rpp-bak) whose MIDI track has your drum instrument."
+    ),
+    track: str = typer.Option("MIDI", help="Pick the first track whose name contains this."),
+    clear: bool = typer.Option(False, help="Remove the stored template."),
+) -> None:
+    """Store the FX chain (drum VSTi) to pre-load on the MIDI tracks of generated projects."""
+    from drums2midi.reaper import FX_TEMPLATE_PATH, extract_fx_chain
+
+    if clear:
+        FX_TEMPLATE_PATH.unlink(missing_ok=True)
+        console.print(f"removed {escape(str(FX_TEMPLATE_PATH))}")
+        return
+    if project is None:
+        if FX_TEMPLATE_PATH.exists():
+            first = FX_TEMPLATE_PATH.read_text().splitlines()
+            plugin = next((ln.strip() for ln in first if ln.lstrip().startswith("<")), "?")
+            console.print(f"template: {escape(str(FX_TEMPLATE_PATH))}\n  {escape(plugin[:100])}")
+        else:
+            console.print("no template stored; pass a Reaper project to extract one")
+        return
+    chain = extract_fx_chain(
+        project.expanduser().read_text(encoding="utf-8", errors="replace"), track_contains=track
+    )
+    if not chain:
+        console.print(
+            f"[red]no FX chain found[/] on a track containing {track!r} in {escape(str(project))}"
+        )
+        raise typer.Exit(code=1)
+    FX_TEMPLATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    FX_TEMPLATE_PATH.write_text(chain, encoding="utf-8")
+    plugin = next((ln.strip() for ln in chain.splitlines() if ln.lstrip().startswith("<")), "?")
+    console.print(
+        f"stored {escape(str(FX_TEMPLATE_PATH))}\n  {escape(plugin[:100])}\n"
+        "New projects (and `resimplify`) will load it on the MIDI tracks."
+    )
+
+
 def _execute(fn) -> None:
     reporter = RichReporter()
     try:
@@ -225,7 +265,13 @@ def _print_summary(result) -> None:
             f"audio starts at {layout.shift:.3f}s in the DAW timeline",
         )
     table.add_row("midi", escape(str(result.midi_path)))
-    table.add_row("reaper", escape(str(result.rpp_path)))
+    out_info = job.stage_info("output")
+    reaper_note = ""
+    if result.rpp_path.name != "project.RPP":
+        reaper_note = "  [yellow](project.RPP was saved by Reaper and left untouched)[/]"
+    elif not out_info.get("fx_chain"):
+        reaper_note = "  [dim](no drum VSTi template; see `drums2midi fx-template`)[/]"
+    table.add_row("reaper", escape(str(result.rpp_path)) + reaper_note)
     table.add_row("folder", escape(str(job.dir)))
     console.print()
     console.print(table)

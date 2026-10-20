@@ -11,6 +11,7 @@ drums2midi doctor       # all green = environment is fine
 drums2midi run <file|url>   # full pipeline → ~/Music/Drums2MIDI/<title> (<hash>)/
 drums2midi resimplify <job-dir> [--count-in 0 ...]   # reruns only simplify/output
 drums2midi lyrics <job-dir> [--artist .. --title .. --offset ..]   # reruns only lyrics/output
+drums2midi fx-template <saved.RPP>   # store the user's drum VSTi chain → ~/.config/drums2midi/
 
 mise run test           # fast suite (~1 s; ADTOF weights are bundled)
 mise run test-slow      # also runs Demucs + Beat This! end to end (needs cached/downloaded weights)
@@ -44,7 +45,8 @@ src/drums2midi/
   lyrics.py     Line/Lyrics, LRC parse/format, song Hints, lrclib lookup, vocal-stem offset check
   lrclib.py     lrclib.net client (retries, UA) + candidate ranking
   midi_out.py   CountIn, TempoMap, Layout, build_sequence() → Sequence; write_midi() (+ lyric events)
-  reaper.py     write_rpp(): stem L, MIDI tracks R, original muted; MIDI events embedded; MARKERs
+  reaper.py     write_rpp(): practice mix (stem muted L, MIDI centre + FX template, daring muted R,
+                original quiet R), MARKERs, RENDER_* settings; extract_fx_chain(); is_generated()
   audio.py / devices.py   small helpers
 tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop with known hits
 ```
@@ -70,6 +72,12 @@ tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop with kn
   (`lines_song_time`); the **output stage** writes every timed artifact — `lyrics.lrc`
   (count-in timeline, countdown lines first), `lyrics-original.lrc` (song time), markers, MIDI
   lyric events — because only it knows `Layout.shift`.
+- **Never overwrite a Reaper-saved `project.RPP`.** `project_target()` checks the header
+  (`is_generated`); if Reaper saved it, the regeneration goes to `project.new.RPP`. This rule
+  exists because an early `resimplify` clobbered the user's mix settings.
+- **FX template.** `~/.config/drums2midi/midi-track.RfxChain` (inner lines of an `<FXCHAIN>`
+  block, Reaper's own `.RfxChain` format) is injected on every MIDI track with a fresh `FXID`.
+  It is personal (EZdrummer 3 state, ~1.4k lines) and lives outside the repo.
 - **`OUTPUT_FORMAT`** in `pipeline.py` is part of the output stage's cache params. Bump it
   whenever the output stage starts writing different files or content for the same inputs,
   otherwise existing jobs keep their stale outputs.
@@ -106,6 +114,9 @@ Derived from a project saved by Reaper 7.82 and locked by `tests/test_reaper.py`
 - In-project MIDI: `<SOURCE MIDI` / `HASDATA 1 480 QN` / `E <delta ticks> <status> <d1> <d2>` (hex,
   lowercase) / final `E <delta> b0 7b 00` marks the source end / `IGNTEMPO 0 <bpm> <num> 4`.
 - GUIDs are `{UPPERCASE-UUID4}`; Reaper fills in every field we omit.
+- `MARKER <n> <pos> "<text>" 0` is accepted; Reaper expands it to `... 0 0 1 B {GUID} 0 2` on save.
+- Render: `RENDER_FILE "<dir>"`, `RENDER_PATTERN "<name>"`, `RENDER_FMT 0 2 44100`,
+  `RENDER_RANGE 1 0 0 0 1000` (entire project), `<RENDER_CFG>` blob `ZXZhdxgAAQ==` = WAV 24-bit.
 
 ## Conventions
 

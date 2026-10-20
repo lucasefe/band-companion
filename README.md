@@ -61,6 +61,7 @@ drums2midi run <audio-file> [options]
 
 drums2midi resimplify <job-dir> [--count-in 0 …]   # regenerate MIDI/Reaper from cached analysis
 drums2midi lyrics <job-dir> [--artist … --title … --offset …]   # redo only the lyrics
+drums2midi fx-template <project.RPP>                 # remember your drum VSTi for new projects
 drums2midi doctor                                    # check tools, packages, GPU
 ```
 
@@ -91,16 +92,31 @@ downbeat. The song's bar 1 is therefore bar 3 in the DAW, and bar lines land on 
 The CLI prints the offset (`audio starts at 2.540s`) in case you line the `.mid` up with the
 audio in another DAW by hand.
 
-**The Reaper project** is about timing, not sounds — add your own drum instrument:
+**The Reaper project** is set up as a practice mix, ready to render:
 
 | Track | Content | Pan | State |
 |---|---|---|---|
-| `<title> (drums)` | `drums.wav`, the real drums | hard left | on, −9 dB |
-| `<title> (MIDI conservative)` | `drums.mid` | hard right | on — put a drum VSTi here |
+| `<title> (drums)` | `drums.wav`, the real drums | hard left | muted, −9 dB (unmute to compare) |
+| `<title> (MIDI conservative)` | `drums.mid` | **centre** | on — your drum VSTi goes here |
 | `<title> (MIDI daring)` | `drums-daring.mid` | hard right | muted |
-| `<title> (original)` | `original.wav` | center | muted |
+| `<title> (original)` | `original.wav`, the song as reference | right (0.6) | on, −16 dB |
 
-Flip the mutes on the two MIDI tracks to compare them against the stem.
+File → Render is pre-filled (job folder, `<title> (practice).wav`, 24-bit 44.1 kHz, whole
+project), so the render is one click and lines up with `lyrics.lrc` — count-in included.
+
+**Your drum instrument.** Set it up once in Reaper on the MIDI track, save the project, then:
+
+```bash
+drums2midi fx-template "~/Music/Drums2MIDI/<job>/project.RPP"
+```
+
+The FX chain (plugin and its state, e.g. the loaded kit) is stored in
+`~/.config/drums2midi/midi-track.RfxChain` and pre-loaded on the MIDI tracks of every project
+generated from then on. `drums2midi fx-template` shows what is stored; `--clear` removes it. A
+Reaper-exported `.RfxChain` dropped at that path works too.
+
+**Your edits are safe.** Once Reaper has saved `project.RPP`, drums2midi never writes to it again;
+a regeneration (`resimplify`, `lyrics`) goes to `project.new.RPP` next to it.
 
 **Conservative vs daring.** The conservative file uses the transcriber's default thresholds and
 rarely invents hits, but it is shy on toms and cymbals. The daring file lowers the thresholds

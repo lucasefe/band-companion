@@ -8,7 +8,17 @@ from typing import Any, Protocol
 from drums2midi.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and drums.mid; other profiles get a suffix
-OUTPUT_FORMAT = 2  # bump when the output stage writes different files/content for the same inputs
+OUTPUT_FORMAT = 3  # bump when the output stage writes different files/content for the same inputs
+
+
+def project_target(job: Job) -> Path:
+    """Where to write the Reaper project: never over a file Reaper has saved (user edits)."""
+    from drums2midi.reaper import is_generated
+
+    main = job.path("project.RPP")
+    if main.exists() and not is_generated(main):
+        return job.path("project.new.RPP")
+    return main
 
 
 def notes_file(profile: str) -> str:
@@ -164,7 +174,16 @@ class _Runner:
 
         from drums2midi.audio import duration_seconds
         from drums2midi.midi_out import CountIn, build_sequence, write_midi
-        from drums2midi.reaper import STEM_VOLUME_DB, AudioTrack, MidiTrack, write_rpp
+        from drums2midi.reaper import (
+            ORIGINAL_PAN,
+            ORIGINAL_VOLUME_DB,
+            STEM_VOLUME_DB,
+            AudioTrack,
+            MidiTrack,
+            RenderSettings,
+            load_fx_template,
+            write_rpp,
+        )
         from drums2midi.separate import MODELS, separate
         from drums2midi.simplify import (
             PROFILES,
@@ -270,8 +289,12 @@ class _Runner:
                 )
             self._write_lrc_files(lyrics_info, song_lines, lyric_lines, layout, count_in)
             duration = duration_seconds(job.path("original.wav"))
+            fx_chain = load_fx_template()
+            rpp_path = project_target(job)
             write_rpp(
-                job.path("project.RPP"),
+                rpp_path,
+                # The practice mix: real drums muted (unmute to compare), MIDI drums centred,
+                # the song quiet on the right so the drummer can hear it without it dominating.
                 stem=AudioTrack(
                     name=f"{job.title} (drums)",
                     file="drums.wav",
@@ -279,14 +302,16 @@ class _Runner:
                     position=layout.shift,
                     pan=-1.0,
                     volume_db=STEM_VOLUME_DB,
+                    muted=True,
                 ),
                 midi=[
                     MidiTrack(
                         name=f"{job.title} (MIDI {profile})",
                         item_name=f"{job.title} {profile}",
                         seq=seq,
-                        pan=1.0,
+                        pan=0.0 if profile == PRIMARY else 1.0,
                         muted=profile != PRIMARY,
+                        fx_chain=fx_chain,
                     )
                     for profile, seq in seqs.items()
                 ],
@@ -295,11 +320,18 @@ class _Runner:
                     file="original.wav",
                     duration=duration,
                     position=layout.shift,
-                    muted=True,
+                    pan=ORIGINAL_PAN,
+                    volume_db=ORIGINAL_VOLUME_DB,
                 ),
                 markers=lyric_lines,
+                render=RenderSettings(directory=str(job.dir), pattern=f"{job.title} (practice)"),
             )
-            return {"shift": layout.shift, "count_in_seconds": layout.count_in_seconds}
+            return {
+                "shift": layout.shift,
+                "count_in_seconds": layout.count_in_seconds,
+                "project": rpp_path.name,
+                "fx_chain": fx_chain is not None,
+            }
 
         self.stage("output", output_params, do_output, detail="midi + lrc + rpp")
 
@@ -309,7 +341,7 @@ class _Runner:
             notes=notes[PRIMARY],
             layout=layout,
             midi_path=job.path(midi_file(PRIMARY)),
-            rpp_path=job.path("project.RPP"),
+            rpp_path=job.path(job.stage_info("output").get("project", "project.RPP")),
             counts={p: count_by_class(n) for p, n in notes.items()},
             lyrics=lyrics_info,
             timings=self.timings,

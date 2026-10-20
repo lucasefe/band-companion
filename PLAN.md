@@ -182,15 +182,20 @@ waiting for Demucs again.
 - Time signature event from the detected meter (4/4 normally).
 
 ### output: project.RPP
-Plain-text Reaper project whose only job is **timing**: an A/B of the real drums against the
-transcription, one in each ear. The user adds the drum instrument themselves.
-- Project tempo = global BPM, time signature from meter.
-- Track 1 "<title> (drums)": `drums.wav` at position `shift`, panned hard **left**, −9 dB.
-- Track 2 "<title> (MIDI)": in-project MIDI item at 0, panned hard **right**, no FX. The events
-  are embedded in Reaper's own `E <delta> <status> <d1> <d2>` format and come from the same
-  `Sequence` that produced `drums.mid`, so the two can never drift apart.
-- Track 3 "<title> (original)": `original.wav` at position `shift`, muted.
-- Format was derived from a project saved by Reaper 7 and is locked with tests.
+A practice mix on the same timeline as `drums.mid`, ready to render. The user adds the drum
+instrument once; it is remembered as a template.
+- Project tempo = global BPM, time signature from meter; render pre-configured
+  (`RENDER_FILE` = job dir, `RENDER_PATTERN` = `<title> (practice)`, 24-bit WAV, 44.1 kHz).
+- Track 1 "<title> (drums)": `drums.wav` at `shift`, hard left, −9 dB, **muted**.
+- Track 2 "<title> (MIDI conservative)": in-project MIDI at 0, **centre**, with the FX chain
+  from `~/.config/drums2midi/midi-track.RfxChain` if present (`drums2midi fx-template`).
+- Track 3 "<title> (MIDI daring)": same, hard right, muted, same FX chain (fresh `FXID`).
+- Track 4 "<title> (original)": `original.wav` at `shift`, pan +0.6, −16 dB, on.
+- One `MARKER` per lyric line. Events embedded in Reaper's `E <delta> <status> <d1> <d2>` format
+  from the same `Sequence` as `drums.mid`.
+- **Never overwrite a Reaper save**: if `project.RPP`'s header is not ours, regenerate into
+  `project.new.RPP`.
+- Format derived from projects saved by Reaper 7 and locked with tests.
 
 ### lyrics (studio recordings only — no live/cover timing)
 

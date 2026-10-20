@@ -94,3 +94,112 @@ def test_markers_are_written_at_project_level(loop_beats, tmp_path: Path):
     head = text.split("<TRACK")[0]
     assert "  MARKER 1 19.89 \"Tal vez te 'olvides'\" 0\n" in head
     assert '  MARKER 2 0 "clamped" 0\n' in head
+
+
+SAVED_BY_REAPER = """<REAPER_PROJECT 0.1 "7.82/macOS-arm64" 1792499948 0
+  TEMPO 120 4 4 0
+  <TRACK {AAA}
+    NAME "Song (drums)"
+    VOLPAN 0.35 -1 -1 -1 1
+    <ITEM
+      POSITION 2.54
+    >
+  >
+  <TRACK {BBB}
+    NAME "Song (MIDI conservative)"
+    VOLPAN 1 0 -1 -1 1
+    <FXCHAIN
+      BYPASS 0 0 0
+      <AU "AUi: EZdrummer 3 (Toontrack)" "Toontrack: EZdrummer 3" "" 1 2 3
+        AAAA
+        BBBB
+      >
+      FLOATPOS 0 0 0 0
+      FXID {68395ED7-854B-4342-A6B0-F89AB1DB2E63}
+      WAK 0 0
+    >
+    <ITEM
+      POSITION 0
+      <SOURCE MIDI
+        HASDATA 1 480 QN
+        E 0 99 24 75
+      >
+    >
+  >
+>
+"""
+
+
+def test_extract_fx_chain_from_the_midi_track():
+    from drums2midi.reaper import extract_fx_chain
+
+    chain = extract_fx_chain(SAVED_BY_REAPER, track_contains="MIDI")
+    assert chain is not None
+    lines = chain.splitlines()
+    assert lines[0] == "    BYPASS 0 0 0"
+    assert lines[1].startswith('    <AU "AUi: EZdrummer 3 (Toontrack)"')
+    assert lines[-1] == "    WAK 0 0"
+    assert "<SOURCE MIDI" not in chain and "<ITEM" not in chain
+    assert extract_fx_chain(SAVED_BY_REAPER, track_contains="drums") is None
+
+
+def test_is_generated_distinguishes_our_files_from_reaper_saves(tmp_path: Path):
+    from drums2midi.reaper import HEADER, is_generated
+
+    ours = tmp_path / "a.RPP"
+    ours.write_text(HEADER + "\n>\n")
+    theirs = tmp_path / "b.RPP"
+    theirs.write_text(SAVED_BY_REAPER)
+    assert is_generated(ours)
+    assert not is_generated(theirs)
+    assert not is_generated(tmp_path / "missing.RPP")
+
+
+def test_fx_chain_and_render_settings_are_written(loop_beats, tmp_path: Path):
+    from drums2midi.reaper import RenderSettings, extract_fx_chain, load_fx_template
+
+    template = tmp_path / "midi-track.RfxChain"
+    template.write_text(extract_fx_chain(SAVED_BY_REAPER))
+    chain = load_fx_template(template)
+    seq = build_sequence([Note(0.0, "kick", 36, 100, 0.9)], loop_beats, count_in=None)
+    path = tmp_path / "project.RPP"
+    write_rpp(
+        path,
+        stem=AudioTrack("drums", "drums.wav", 9.6, 0.0, muted=True),
+        midi=[
+            MidiTrack("a", "a", seq, fx_chain=chain),
+            MidiTrack("b", "b", seq, fx_chain=chain, muted=True),
+        ],
+        render=RenderSettings(directory="/tmp/job", pattern="Song (practice)"),
+    )
+    text = path.read_text()
+    assert text.count("<FXCHAIN") == 2 and text.count('<AU "AUi: EZdrummer 3') == 2
+    fxids = re.findall(r"FXID (\{[0-9A-F-]+\})", text)
+    assert len(fxids) == 2 and fxids[0] != fxids[1], "each track gets its own FX instance id"
+    assert '  RENDER_FILE "/tmp/job"\n  RENDER_PATTERN "Song (practice)"\n' in text
+    assert "  RENDER_FMT 0 2 44100\n" in text and "    ZXZhdxgAAQ==\n" in text
+    opens = len(re.findall(r"^\s*<", text, re.M))
+    closes = len(re.findall(r"^\s*>$", text, re.M))
+    assert opens == closes
+
+
+def test_load_fx_template_accepts_a_wrapped_block(tmp_path: Path):
+    from drums2midi.reaper import load_fx_template
+
+    p = tmp_path / "t.RfxChain"
+    p.write_text("<FXCHAIN\n  BYPASS 0 0 0\n  <AU x\n    yy\n  >\n>\n")
+    assert load_fx_template(p) == "    BYPASS 0 0 0\n    <AU x\n      yy\n    >\n"
+    assert load_fx_template(tmp_path / "none") is None
+
+
+def test_project_target_never_overwrites_a_reaper_save(tmp_path: Path):
+    from drums2midi.job import Job
+    from drums2midi.pipeline import project_target
+    from drums2midi.reaper import HEADER
+
+    job = Job.create(tmp_path, "Song", "/x.wav", "abcd1234")
+    assert project_target(job) == job.path("project.RPP")
+    job.path("project.RPP").write_text(HEADER + "\n>\n")
+    assert project_target(job) == job.path("project.RPP"), "our own file is fair game"
+    job.path("project.RPP").write_text(SAVED_BY_REAPER)
+    assert project_target(job) == job.path("project.new.RPP")
