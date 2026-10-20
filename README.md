@@ -22,7 +22,8 @@ Each song folder holds three files on **one timeline** — two bars of count-in,
 tracks/Cumple de Guille/02 - Fotografía/
 ├── Fotografia.lrc             lyrics; the count-in shows as a countdown, 1 2 3 4 · 1 2 3 4
 ├── Fotografia.wav             the drums (your drum instrument, rendered from Reaper)
-└── Fotografia.reference.wav   the original song, with the same count-in clicks
+├── Fotografia.reference.wav   the original song, with the same count-in clicks
+└── backline.json              where it came from (URL or file), tempo, count-in, lyrics source
 ```
 
 The band plays to the drums. The leader can bring the original in underneath at any volume,
@@ -50,9 +51,11 @@ backline add <audio-file | URL> [--set "Cumple de Guille"] [--number 3]
 1. **Analysis** (~20 s on an M-series Mac): Demucs separates drums and vocals, ADTOF
    transcribes the drums, Beat This! finds the beat and the first downbeat, lyrics come from
    [LRCLIB](https://lrclib.net) and are checked against the isolated vocal.
-2. **The song folder** `tracks/<set>/<NN - Title>/` gets `Title.lrc` and
-   `Title.reference.wav` right away. The set comes from `--set` or `backline.toml`; the number
-   from `--number` or the next free one. Running the same song again reuses its folder.
+2. **The song folder** `tracks/<set>/<NN - Title>/` gets `Title.lrc`, `Title.reference.wav`
+   and `backline.json` right away. The set comes from `--set` or `backline.toml`; the number
+   from `--number` or the next free one. A song that was already imported from the same URL
+   or file is recognised by `backline.json` and its folder reused, whatever title or set you
+   pass; renumber by renaming the folder.
 3. **The drums** need your instrument, so they go through Reaper: open the project the command
    prints (in `~/Music/Backline/jobs/<Artist - Title>/`), File → Render. The dialog is
    pre-filled to put `Title.wav` in the song folder. Your drum VSTi is already on the track
@@ -219,7 +222,7 @@ tracks/
 
 - A leading number controls the order and is stripped from the name shown. The folder name is the song title.
 - Set folders become tabs. With a single set the tabs are hidden.
-- Each song folder holds one `.wav` (what the band plays to), optionally one `.reference.wav` (the original, same timeline), and optionally one `.lrc`/`.txt`. Other files are ignored.
+- Each song folder holds one `.wav` (what the band plays to), optionally one `.reference.wav` (the original, same timeline), and optionally one `.lrc`/`.txt`. Other files are ignored by the player; `backline.json`, written by the importer, records the origin and is committed.
 - `.lrc` lyrics are timed (`[01:02.50]line`) and get the highlighted, auto-scrolling view. Untimed lines (metadata, credits) are ignored. A `.txt` is shown as plain scrollable text.
 
 The WAV files are not committed; `mise run sync-audio` hashes them, uploads the missing ones to

@@ -101,3 +101,31 @@ def test_song_folder_comes_from_the_config(loop_wav: Path, tmp_path: Path):
     assert result.output_dir == tracks / "Gig" / "02 - loop"
     assert (result.output_dir / "loop.reference.wav").exists()
     assert result.job.manifest["options"]["deliver_to"] == str(result.output_dir)
+    assert not result.deduped
+
+    record = json.loads((result.output_dir / "backline.json").read_text())
+    assert record["hash"] == result.job.manifest["hash"]
+    assert record["song"] == {"artist": None, "title": "loop"}
+    assert record["source"]["kind"] == "file"
+    assert record["source"]["path"] == str(loop_wav.resolve())
+    assert record["files"] == {
+        "lyrics": None,
+        "reference": "loop.reference.wav",
+        "drums": "loop.wav",
+    }
+    assert record["timeline"]["count_in_bars"] == 2 and record["timeline"]["bpm"] == 100
+    assert record["lyrics"] == {"found": False, "reason": "disabled"}
+
+    # The same source again, even under another title and set, is recognised and reused.
+    again = run(
+        str(loop_wav),
+        RunOptions(
+            out_root=cfg.jobs, device="cpu", lyrics=False, title="Renamed", set_name="Other"
+        ),
+        config=cfg,
+    )
+    assert again.deduped
+    assert again.output_dir == tracks / "Gig" / "02 - loop"
+    assert not (tracks / "Other").exists()
+    assert again.job.dir == result.job.dir, "the hash identifies the job"
+    assert set(again.timings) <= {"lyrics", "output"}, "a new --title only re-triggers the lyrics"

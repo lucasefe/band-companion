@@ -65,7 +65,7 @@ class Job:
         hash: str,
     ) -> Job:
         name = f"{artist} - {title}" if artist else title
-        dir = root / f"{sanitize_name(name)} ({hash})"
+        dir = cls.find(root, hash) or root / f"{sanitize_name(name)} ({hash})"
         for sub in (INPUT, WORK, OUTPUT):
             (dir / sub).mkdir(parents=True, exist_ok=True)
         manifest_path = dir / MANIFEST
@@ -82,6 +82,16 @@ class Job:
         job = cls(dir, manifest)
         job.save()
         return job
+
+    @classmethod
+    def find(cls, root: Path, hash: str) -> Path | None:
+        """An existing job for this source, whatever title it was created under."""
+        if not root.is_dir():
+            return None
+        for candidate in sorted(root.glob(f"* ({hash})")):
+            if (candidate / MANIFEST).is_file():
+                return candidate
+        return None
 
     @classmethod
     def open(cls, dir: Path) -> Job:

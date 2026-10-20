@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from backline import job as J
+from backline.catalog import find_by_hash, write_record
 from backline.config import Config, load_config, song_folder
 from backline.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and <title>.mid; other profiles get a suffix
-OUTPUT_FORMAT = 5  # bump when the output stage writes different files/content for the same inputs
+OUTPUT_FORMAT = 6  # bump when the output stage writes different files/content for the same inputs
 
 
 @dataclass
@@ -64,6 +65,7 @@ class RunResult:
     output_dir: Path
     outputs: dict[str, Path]  # lrc / reference / midi / render target
     fx_chain: bool
+    deduped: bool = False  # the song folder already existed for this source
     timings: dict[str, float] = field(default_factory=dict)
 
 
@@ -414,6 +416,7 @@ class _Runner:
                 markers=lyric_lines,
                 render=RenderSettings(directory=str(out_dir), pattern=stem),
             )
+            write_record(out_dir, self._song_record(outputs, rpp_path, layout, lyrics_info))
             return {
                 "shift": layout.shift,
                 "count_in_seconds": layout.count_in_seconds,
@@ -441,6 +444,7 @@ class _Runner:
             output_dir=out_dir,
             outputs=outputs,
             fx_chain=bool(info.get("fx_chain")),
+            deduped=self.deduped is not None,
             timings=self.timings,
         )
 
@@ -451,8 +455,14 @@ class _Runner:
         even if other songs were added to the set in between.
         """
         job, opts, cfg = self.job, self.opts, self.config
+        self.deduped: Path | None = None
+        existing = find_by_hash(cfg.tracks, job.manifest["hash"]) if cfg.tracks else None
         if opts.deliver_to:
             out = job.output_dir(opts.deliver_to)
+        elif existing:
+            # Already imported from this very source: keep its folder, whatever the set/number.
+            out = existing
+            self.deduped = existing
         elif cfg.tracks and (opts.set_name or cfg.default_set):
             out = song_folder(
                 cfg.tracks, opts.set_name or cfg.default_set, job.file_stem, opts.number
@@ -464,6 +474,46 @@ class _Runner:
             job.manifest["options"]["deliver_to"] = str(out)
             job.save()
         return out
+
+    def _song_record(self, outputs, rpp_path, layout, lyrics_info) -> dict[str, Any]:
+        """What goes into the song folder's backline.json."""
+        from backline import __version__
+
+        job = self.job
+        source: dict[str, Any] = {"kind": "file", "path": job.manifest["source"]}
+        try:
+            source = json.loads(job.path(J.SOURCE_JSON).read_text())
+        except (OSError, ValueError):
+            pass
+        source.pop("ingested_at", None)
+        lyrics = lyrics_info.get("lyrics") or {}
+        return {
+            "backline": __version__,
+            "hash": job.manifest["hash"],
+            "song": {"artist": job.artist, "title": job.title},
+            "source": source,
+            "job": str(job.dir),
+            "project": rpp_path.name,
+            "files": {
+                "lyrics": outputs["lrc"].name if lyrics_info.get("found") else None,
+                "reference": outputs["reference"].name,
+                "drums": outputs["render"].name,
+            },
+            "timeline": {
+                "count_in_bars": self.opts.count_in,
+                "count_in_seconds": layout.count_in_seconds,
+                "song_starts_at": layout.shift,
+                "bpm": layout.bpm,
+                "meter": layout.meter,
+            },
+            "lyrics": {
+                "source": lyrics.get("source"),
+                "offset": lyrics.get("offset", 0.0),
+                "on_vocal": lyrics.get("confidence"),
+            }
+            if lyrics_info.get("found")
+            else {"found": False, "reason": lyrics_info.get("reason") or lyrics_info.get("error")},
+        }
 
     def _do_lyrics(self) -> dict:
         """Find lyrics, check their timing against the vocal stem, write lyrics.{json,txt}.

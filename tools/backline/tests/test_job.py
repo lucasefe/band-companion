@@ -35,6 +35,10 @@ def test_job_layout_and_names(tmp_path: Path):
     solo = Job.create(tmp_path, title="NoPodras", artist=None, source="f", hash="00000000")
     assert solo.dir.name == "NoPodras (00000000)"
 
+    same = Job.create(tmp_path, title="Other Title", artist="X", source="f", hash="00000000")
+    assert same.dir == solo.dir, "the hash identifies the job, not the title"
+    assert same.title == "NoPodras"
+
 
 def test_job_caching_round_trip(tmp_path: Path):
     job = Job.create(tmp_path, title="Song", artist=None, source="/x/song.wav", hash="abcd1234")

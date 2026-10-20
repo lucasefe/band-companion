@@ -37,6 +37,7 @@ video 244 s vs 241 s album cut → lyrics offset +0.80 s is expected), job
 - One folder per song: `tracks/<set>/<NN - Title>/` with one `.wav` (git-ignored), optionally one `*.reference.wav` (git-ignored; the original on the same timeline) and optionally one `.lrc`/`.txt` (committed). Track id = folder path, used in the realtime protocol; renaming a folder changes the id.
 - `tracks/audio.json` entries: `{ key, bytes, source, uploaded, reference?: { key, bytes, source, uploaded } }`. `src/tracks.ts` reads it for audio (`/audio/<hash>.wav`) and globs lyrics with `import.meta.glob(..., { query: '?raw' })`. A song needs an audio entry to be listed; lyrics without audio only warn.
 - The `.lrc` is on the count-in timeline (countdown lines first). Never hand-edit timings to match a different render; regenerate with `backline resimplify`.
+- `backline.json` (committed) is the song's provenance: source hash + URL/file + yt-dlp meta, job path, timeline, lyrics source. `catalog.find_by_hash()` dedupes `backline add` on it (an existing folder wins over `--set/--number`); `Job.find()` dedupes the job folder by the same hash. Renumbering = renaming the folder; the record moves with it.
 - Audio never goes through the Vite build: Cloudflare rejects assets over 25 MB. Do not add audio globs or move audio into `public/`.
 - Unicode: macOS reports folder names as NFD, git (`core.precomposeunicode`) stores and checks them out as NFC. `sync-audio.mjs` and `tracks.ts` normalize every folder key to NFC; keep it that way or a fresh checkout pairs no lyrics with the audio. Compare titles with `.normalize('NFC')` in tests.
 
@@ -83,6 +84,7 @@ Plain `chrome --headless --screenshot` cannot do phone widths. `scripts/cdp.mjs`
 src/backline/
   cli.py        typer: add / resimplify / lyrics / fx-template / doctor. Rich to stderr.
   config.py     backline.toml (found upwards from cwd, else repo root); song_folder() numbering
+  catalog.py    backline.json per song folder: write_record(), find_by_hash() for dedupe
   pipeline.py   stages + per-job caching (_Runner), RunOptions/RunResult, output-folder resolution
   job.py        job layout (input/ work/ output/ + <Title>.RPP), path constants, manifest
   ingest.py     file or URL → input/original.wav (ffmpeg; yt-dlp subprocess for URLs)

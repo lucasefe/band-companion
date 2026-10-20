@@ -294,7 +294,10 @@ def _print_summary(result) -> None:
     elif not result.fx_chain:
         project_note = "  [dim](no drum VSTi template yet; see `backline fx-template`)[/]"
     table.add_row("project", escape(str(result.project_path)) + project_note)
-    table.add_row("song folder", escape(str(result.output_dir)))
+    folder_note = (
+        "  [dim](already imported from this source; folder reused)[/]" if result.deduped else ""
+    )
+    table.add_row("song folder", escape(str(result.output_dir)) + folder_note)
     have = [result.outputs["reference"].name]
     if result.lyrics.get("found"):
         have.insert(0, result.outputs["lrc"].name)
