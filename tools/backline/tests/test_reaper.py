@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from drums2midi.midi_out import PPQ, CountIn, build_sequence
-from drums2midi.reaper import AudioTrack, MidiTrack, write_rpp
-from drums2midi.simplify import Note
+from backline.midi_out import PPQ, CountIn, build_sequence
+from backline.reaper import AudioTrack, MidiTrack, write_rpp
+from backline.simplify import Note
 
 
 @pytest.fixture
@@ -131,7 +131,7 @@ SAVED_BY_REAPER = """<REAPER_PROJECT 0.1 "7.82/macOS-arm64" 1792499948 0
 
 
 def test_extract_fx_chain_from_the_midi_track():
-    from drums2midi.reaper import extract_fx_chain
+    from backline.reaper import extract_fx_chain
 
     chain = extract_fx_chain(SAVED_BY_REAPER, track_contains="MIDI")
     assert chain is not None
@@ -144,7 +144,7 @@ def test_extract_fx_chain_from_the_midi_track():
 
 
 def test_is_generated_distinguishes_our_files_from_reaper_saves(tmp_path: Path):
-    from drums2midi.reaper import HEADER, is_generated
+    from backline.reaper import HEADER, is_generated
 
     ours = tmp_path / "a.RPP"
     ours.write_text(HEADER + "\n>\n")
@@ -156,7 +156,7 @@ def test_is_generated_distinguishes_our_files_from_reaper_saves(tmp_path: Path):
 
 
 def test_fx_chain_and_render_settings_are_written(loop_beats, tmp_path: Path):
-    from drums2midi.reaper import RenderSettings, extract_fx_chain, load_fx_template
+    from backline.reaper import RenderSettings, extract_fx_chain, load_fx_template
 
     template = tmp_path / "midi-track.RfxChain"
     template.write_text(extract_fx_chain(SAVED_BY_REAPER))
@@ -184,7 +184,7 @@ def test_fx_chain_and_render_settings_are_written(loop_beats, tmp_path: Path):
 
 
 def test_load_fx_template_accepts_a_wrapped_block(tmp_path: Path):
-    from drums2midi.reaper import load_fx_template
+    from backline.reaper import load_fx_template
 
     p = tmp_path / "t.RfxChain"
     p.write_text("<FXCHAIN\n  BYPASS 0 0 0\n  <AU x\n    yy\n  >\n>\n")
@@ -193,9 +193,9 @@ def test_load_fx_template_accepts_a_wrapped_block(tmp_path: Path):
 
 
 def test_project_target_never_overwrites_a_reaper_save(tmp_path: Path):
-    from drums2midi.job import Job
-    from drums2midi.pipeline import project_target
-    from drums2midi.reaper import HEADER
+    from backline.job import Job
+    from backline.pipeline import project_target
+    from backline.reaper import HEADER
 
     job = Job.create(tmp_path, title="Song", artist=None, source="/x.wav", hash="abcd1234")
     assert project_target(job) == job.dir / "Song.RPP"

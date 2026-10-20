@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from drums2midi.audio import SAMPLE_RATE
+from backline.audio import SAMPLE_RATE
 
 AUDIO_EXTENSIONS = {
     ".wav",

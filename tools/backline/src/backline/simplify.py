@@ -8,8 +8,8 @@ from typing import Any
 
 import numpy as np
 
-from drums2midi.tempo import Beats
-from drums2midi.transcribe import CLASSES, DEFAULT_THRESHOLDS, FPS
+from backline.tempo import Beats
+from backline.transcribe import CLASSES, DEFAULT_THRESHOLDS, FPS
 
 STYLES = ("raw", "detailed", "essence")
 GRIDS = (8, 16, 12, 24)

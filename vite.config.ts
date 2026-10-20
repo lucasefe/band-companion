@@ -24,9 +24,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
       },
       manifest: {
-        name: 'Band Companion',
-        short_name: 'Band',
-        description: 'Backing track player for live sets',
+        name: 'Backline',
+        short_name: 'Backline',
+        description: 'Backing tracks, live lyrics and practice drums for a band',
         start_url: '/',
         scope: '/',
         display: 'standalone',

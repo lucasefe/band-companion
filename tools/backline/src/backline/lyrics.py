@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from drums2midi import lrclib
+from backline import lrclib
 
 
 @dataclass

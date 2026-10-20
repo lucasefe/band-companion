@@ -15,8 +15,8 @@ from rich.markup import escape
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 from rich.table import Column, Table
 
-from drums2midi import __version__
-from drums2midi.job import DEFAULT_ROOT
+from backline import __version__
+from backline.job import DEFAULT_ROOT
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console(stderr=True)
@@ -87,8 +87,8 @@ def run(
     ),
 ) -> None:
     """Analyse SOURCE (audio file or YouTube URL) and write MIDI, lyrics and a Reaper project."""
-    from drums2midi.pipeline import RunOptions
-    from drums2midi.pipeline import run as run_pipeline
+    from backline.pipeline import RunOptions
+    from backline.pipeline import run as run_pipeline
 
     opts = RunOptions(
         out_root=out.expanduser(),
@@ -120,7 +120,7 @@ def resimplify(
     to: Path | None = typer.Option(None, "--to", help="Song folder for the .lrc and the render."),
 ) -> None:
     """Regenerate notes, MIDI, lyrics files and the Reaper project from cached analysis (fast)."""
-    from drums2midi.pipeline import resimplify as resimplify_pipeline
+    from backline.pipeline import resimplify as resimplify_pipeline
 
     _execute(
         lambda reporter: resimplify_pipeline(
@@ -146,7 +146,7 @@ def lyrics_cmd(
     ),
 ) -> None:
     """Redo only the lyrics (lookup, timing check, lyrics.lrc, markers) for a job."""
-    from drums2midi.pipeline import redo_lyrics
+    from backline.pipeline import redo_lyrics
 
     _execute(
         lambda reporter: redo_lyrics(
@@ -170,7 +170,7 @@ def fx_template(
     clear: bool = typer.Option(False, help="Remove the stored template."),
 ) -> None:
     """Store the FX chain (drum VSTi) to pre-load on the MIDI tracks of generated projects."""
-    from drums2midi.reaper import FX_TEMPLATE_PATH, extract_fx_chain
+    from backline.reaper import FX_TEMPLATE_PATH, extract_fx_chain
 
     if clear:
         FX_TEMPLATE_PATH.unlink(missing_ok=True)
@@ -280,7 +280,7 @@ def _print_summary(result) -> None:
             f"  [yellow]({job.project_path.name} was saved by Reaper and left untouched)[/]"
         )
     elif not result.fx_chain:
-        project_note = "  [dim](no drum VSTi template yet; see `drums2midi fx-template`)[/]"
+        project_note = "  [dim](no drum VSTi template yet; see `backline fx-template`)[/]"
     table.add_row("project", escape(str(result.project_path)) + project_note)
     table.add_row("output", escape(str(result.output_dir)))
     console.print()
@@ -351,7 +351,7 @@ def _module_version(name: str) -> tuple[bool, str]:
 
 def _torch_device() -> tuple[bool, str]:
     try:
-        from drums2midi.devices import resolve_device
+        from backline.devices import resolve_device
 
         return True, resolve_device("auto")
     except Exception as e:  # noqa: BLE001
@@ -363,7 +363,7 @@ def doctor() -> None:
     """Check that ffmpeg, yt-dlp, PyTorch and the ML packages are available."""
     checks: list[tuple[str, bool, str]] = [
         ("python", True, f"{sys.version.split()[0]}  [{sys.executable}]"),
-        ("drums2midi", True, __version__),
+        ("backline", True, __version__),
         ("ffmpeg", *_binary_version("ffmpeg", "-version")),
         ("yt-dlp", *_binary_version("yt-dlp", "--version")),
         ("torch", *_module_version("torch")),

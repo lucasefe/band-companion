@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from drums2midi import job as J
-from drums2midi.pipeline import RunOptions, resimplify, run
+from backline import job as J
+from backline.pipeline import RunOptions, resimplify, run
 
 
 @pytest.mark.slow

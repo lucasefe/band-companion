@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from drums2midi import job as J
-from drums2midi.job import Job, sanitize_name, source_hash
+from backline import job as J
+from backline.job import Job, sanitize_name, source_hash
 
 
 def test_sanitize_name():

@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from drums2midi.audio import read_wav, write_wav
-from drums2midi.devices import resolve_device
+from backline.audio import read_wav, write_wav
+from backline.devices import resolve_device
 
 MODELS = {"fast": "htdemucs", "best": "htdemucs_ft"}
 VOCALS_SR = 16000  # the vocal stem is only used for analysis (lyrics timing)

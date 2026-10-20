@@ -11,10 +11,10 @@ from typing import Any
 
 import requests
 
-from drums2midi import __version__
+from backline import __version__
 
 API = "https://lrclib.net/api"
-USER_AGENT = f"drums2midi/{__version__} (https://github.com/lucasefe/extract-drums)"
+USER_AGENT = f"backline/{__version__} (https://github.com/lucasefe/band-companion)"
 TIMEOUT = 15
 RETRIES = 5
 

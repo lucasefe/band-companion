@@ -5,9 +5,9 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from drums2midi.midi_out import PPQ, Sequence
+from backline.midi_out import PPQ, Sequence
 
-GENERATOR_TAG = "drums2midi"
+GENERATOR_TAG = "backline"
 HEADER = f'<REAPER_PROJECT 0.1 "7.0/{GENERATOR_TAG}" 0'
 
 # Mix defaults, taken from a project the user saved: the practice render is the MIDI drums
@@ -19,7 +19,7 @@ ORIGINAL_PAN = 0.6
 # Reaper's render-format blob for 24-bit WAV ("evaw" + 0x18 + 0x00 0x01).
 RENDER_CFG_WAV24 = "ZXZhdxgAAQ=="
 
-FX_TEMPLATE_PATH = Path.home() / ".config" / "drums2midi" / "midi-track.RfxChain"
+FX_TEMPLATE_PATH = Path.home() / ".config" / "backline" / "midi-track.RfxChain"
 
 
 @dataclass

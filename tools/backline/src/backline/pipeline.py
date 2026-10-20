@@ -8,8 +8,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from drums2midi import job as J
-from drums2midi.job import DEFAULT_ROOT, Job, source_hash
+from backline import job as J
+from backline.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and <title>.mid; other profiles get a suffix
 OUTPUT_FORMAT = 4  # bump when the output stage writes different files/content for the same inputs
@@ -65,13 +65,13 @@ class RunResult:
 
 
 def run(source: str, opts: RunOptions, reporter: Reporter | None = None) -> RunResult:
-    from drums2midi.ingest import (
+    from backline.ingest import (
         ingest_file,
         ingest_url,
         is_url,
         probe_url,
     )
-    from drums2midi.lyrics import hints_from_file, hints_from_youtube
+    from backline.lyrics import hints_from_file, hints_from_youtube
 
     reporter = reporter or NullReporter()
 
@@ -158,7 +158,7 @@ def options_from_job(job: Job, **overrides: Any) -> RunOptions:
 
 def project_target(job: Job) -> Path:
     """Where to write the Reaper project: never over a file Reaper has saved (user edits)."""
-    from drums2midi.reaper import is_generated
+    from backline.reaper import is_generated
 
     main = job.project_path
     if main.exists() and not is_generated(main):
@@ -214,9 +214,9 @@ class _Runner:
         return self.job.stage_info(name)
 
     def process(self) -> RunResult:
-        from drums2midi.audio import duration_seconds
-        from drums2midi.midi_out import CountIn, build_sequence, write_midi
-        from drums2midi.reaper import (
+        from backline.audio import duration_seconds
+        from backline.midi_out import CountIn, build_sequence, write_midi
+        from backline.reaper import (
             ORIGINAL_PAN,
             ORIGINAL_VOLUME_DB,
             STEM_VOLUME_DB,
@@ -226,16 +226,16 @@ class _Runner:
             load_fx_template,
             write_rpp,
         )
-        from drums2midi.separate import MODELS, separate
-        from drums2midi.simplify import (
+        from backline.separate import MODELS, separate
+        from backline.simplify import (
             PROFILES,
             count_by_class,
             load_notes,
             save_notes,
             simplify,
         )
-        from drums2midi.tempo import Beats, detect_beats
-        from drums2midi.transcribe import load_activations, transcribe
+        from backline.tempo import Beats, detect_beats
+        from backline.transcribe import load_activations, transcribe
 
         job, opts = self.job, self.opts
         model = MODELS[opts.quality]
@@ -421,8 +421,8 @@ class _Runner:
         The .lrc files are written by the output stage, which knows the count-in shift.
         Never raises: a miss is recorded in lyrics.json so the stage is cached like any other.
         """
-        from drums2midi.audio import duration_seconds
-        from drums2midi.lyrics import (
+        from backline.audio import duration_seconds
+        from backline.lyrics import (
             Hints,
             estimate_offset,
             lyrics_from_file,
@@ -501,15 +501,15 @@ class _Runner:
         return {"detail": f"{who} · {kind}", "source": lyrics.source}
 
     def _write_lyrics_json(self, payload: dict[str, Any]) -> None:
-        from drums2midi.lyrics import save_lyrics_json
+        from backline.lyrics import save_lyrics_json
 
         save_lyrics_json(self.job.path(J.LYRICS_JSON), payload)
 
     def _write_lrc_files(self, lrc_path, lyrics_info, song_lines, lyric_lines, layout, count_in):
         """`<stem>.lrc` on the count-in timeline (with a visible countdown) in the output folder;
         `work/lyrics-original.lrc` in song time for the untouched original."""
-        from drums2midi.audio import duration_seconds
-        from drums2midi.lyrics import countdown_lines, format_lrc
+        from backline.audio import duration_seconds
+        from backline.lyrics import countdown_lines, format_lrc
 
         job = self.job
         lrc_path.unlink(missing_ok=True)
@@ -527,7 +527,7 @@ class _Runner:
         def header(total_seconds: float) -> dict[str, str]:
             return dict(base) | {
                 "length": f"{int(total_seconds // 60):02d}:{int(total_seconds % 60):02d}",
-                "re": "drums2midi",
+                "re": "backline",
             }
 
         duration = duration_seconds(job.path(J.ORIGINAL))

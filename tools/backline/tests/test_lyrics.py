@@ -3,8 +3,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from drums2midi import lrclib
-from drums2midi.lyrics import (
+from backline import lrclib
+from backline.lyrics import (
     FRAME_RATE,
     Hints,
     Line,
@@ -175,7 +175,7 @@ def test_estimate_offset_ignores_small_shifts_but_catches_gross_ones():
 
 
 def test_lyrics_from_file_round_trip(tmp_path: Path):
-    from drums2midi.lyrics import lyrics_from_file
+    from backline.lyrics import lyrics_from_file
 
     p = tmp_path / "song.lrc"
     p.write_text(LRC, encoding="utf-8")

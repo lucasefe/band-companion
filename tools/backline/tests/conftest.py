@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from fixtures.make_loop import make_loop
 
-from drums2midi.tempo import Beats
+from backline.tempo import Beats
 
 warnings.simplefilter("ignore")
 

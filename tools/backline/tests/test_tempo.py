@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from drums2midi.tempo import Beats, detect_beats
+from backline.tempo import Beats, detect_beats
 
 
 @pytest.mark.slow

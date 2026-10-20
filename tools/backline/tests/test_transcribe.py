@@ -2,8 +2,8 @@ from pathlib import Path
 
 import numpy as np
 
-from drums2midi.simplify import pick_hits
-from drums2midi.transcribe import CLASSES, FPS, load_activations, transcribe
+from backline.simplify import pick_hits
+from backline.transcribe import CLASSES, FPS, load_activations, transcribe
 
 
 def test_adtof_finds_the_loop_pattern(loop_wav: Path, tmp_path: Path):

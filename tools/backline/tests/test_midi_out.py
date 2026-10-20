@@ -3,7 +3,7 @@ from pathlib import Path
 import mido
 import pytest
 
-from drums2midi.midi_out import (
+from backline.midi_out import (
     NOTE_OFF,
     NOTE_ON,
     PPQ,
@@ -13,8 +13,8 @@ from drums2midi.midi_out import (
     plan_layout,
     write_midi,
 )
-from drums2midi.simplify import Note
-from drums2midi.tempo import Beats
+from backline.simplify import Note
+from backline.tempo import Beats
 
 
 def note_ons(path: Path) -> list[tuple[int, int, int]]:

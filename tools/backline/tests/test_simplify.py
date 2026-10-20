@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-from drums2midi.simplify import (
+from backline.simplify import (
     GM_NOTES,
     count_by_class,
     load_notes,
@@ -10,7 +10,7 @@ from drums2midi.simplify import (
     save_notes,
     simplify,
 )
-from drums2midi.transcribe import CLASSES, FPS
+from backline.transcribe import CLASSES, FPS
 
 
 def synthetic_activations(hits: dict[str, list[tuple[float, float]]], seconds: float = 4.0):

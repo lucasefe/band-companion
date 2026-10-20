@@ -1,0 +1,15 @@
+# Backline configuration. The CLI looks for this file upwards from the current directory.
+
+[paths]
+# Where `backline add` keeps a song's input/, work/ and <Title>.RPP. Big, not in git.
+jobs = "~/Music/Backline/jobs"
+# The song folders the app plays: <tracks>/<set>/<NN - Title>/. Relative to this file.
+tracks = "tracks"
+
+[tracks]
+# Used by `backline add` when --set is not given.
+default_set = "Cumple de Guille"
+
+[count_in]
+bars = 2
+note = 37   # GM side stick, what the MIDI tracks play during the count-in

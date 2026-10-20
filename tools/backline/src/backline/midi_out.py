@@ -6,8 +6,8 @@ from pathlib import Path
 
 import mido
 
-from drums2midi.simplify import Note
-from drums2midi.tempo import Beats
+from backline.simplify import Note
+from backline.tempo import Beats
 
 PPQ = 480
 NOTE_LENGTH_TICKS = PPQ // 8  # 1/32 note

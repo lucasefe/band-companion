@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from drums2midi.devices import resolve_device
+from backline.devices import resolve_device
 
 BEAT_THIS_MODELS = {"final": "final0", "small": "small0"}
 

@@ -83,7 +83,7 @@ export class FollowUI {
 
     root.replaceChildren(
       el('header', { class: 'topbar' }, [
-        el('h1', { class: 'brand', text: 'Band Companion' }),
+        el('h1', { class: 'brand', text: 'Backline' }),
         el('div', { class: 'chips' }, [this.liveChip, this.wakeChip, this.listenChip, leadButton]),
       ]),
       el('div', { class: 'follow-now' }, [this.nowTitle, this.nowSet]),

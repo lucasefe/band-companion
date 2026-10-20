@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-DEFAULT_ROOT = Path.home() / "Music" / "Drums2MIDI"
+DEFAULT_ROOT = Path.home() / "Music" / "Backline" / "jobs"
 
 # Job folder layout. `input/` is what we started from, `work/` is intermediate and disposable,
 # `output/` is a Band Companion song folder (one .lrc, one .wav rendered by Reaper, the MIDI).
@@ -87,7 +87,7 @@ class Job:
     def open(cls, dir: Path) -> Job:
         manifest_path = dir / MANIFEST
         if not manifest_path.exists():
-            raise FileNotFoundError(f"{dir} is not a drums2midi job folder (no {MANIFEST})")
+            raise FileNotFoundError(f"{dir} is not a backline job folder (no {MANIFEST})")
         return cls(dir, json.loads(manifest_path.read_text()))
 
     @property

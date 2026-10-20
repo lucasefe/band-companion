@@ -119,7 +119,7 @@ export class UI {
 
     root.replaceChildren(
       el('header', { class: 'topbar' }, [
-        el('h1', { class: 'brand', text: 'Band Companion' }),
+        el('h1', { class: 'brand', text: 'Backline' }),
         this.songsButton,
         el('div', { class: 'chips' }, [this.offlineChip, this.wakeChip, this.liveChip]),
       ]),

@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = fileURLToPath(new URL('../tracks/', import.meta.url))
 const MANIFEST = join(ROOT, 'audio.json')
-const BUCKET = 'band-companion-audio'
+const BUCKET = 'band-companion-audio' // the deployed bucket; renaming it means re-uploading everything
 const AUDIO_EXT = new Set(['.wav'])
 
 const target = process.argv.includes('--local') ? 'local' : 'remote'
