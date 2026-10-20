@@ -1,28 +1,33 @@
 {
-  "Cumple de Guille/01 - No podrás": {
-    "key": "7e02c8d3ed43f78c.wav",
-    "bytes": 42853642,
-    "source": "NoPodras.wav",
+  "Cumple de Guille/01 - No Podras": {
+    "key": "ed390ddd7c90a6b3.wav",
+    "bytes": 64346118,
+    "source": "No Podras.wav",
     "uploaded": [
-      "remote",
-      "local"
-    ]
-  },
-  "Cumple de Guille/02 - Fotografía": {
-    "key": "7e0afa42a179372a.wav",
-    "bytes": 65838636,
-    "source": "Fotografia.wav",
-    "uploaded": [
-      "remote",
-      "local"
+      "remote"
     ],
     "reference": {
-      "key": "7405743f0b4e9ffe.wav",
-      "bytes": 43892008,
-      "source": "Fotografia.reference.wav",
+      "key": "17a5f9c21766a56e.wav",
+      "bytes": 42896996,
+      "source": "No Podras.reference.wav",
       "uploaded": [
-        "remote",
-        "local"
+        "remote"
+      ]
+    }
+  },
+  "Cumple de Guille/02 - Don't Get Me Wrong": {
+    "key": "4081a8d8388c04c1.wav",
+    "bytes": 61739610,
+    "source": "Don't Get Me Wrong.wav",
+    "uploaded": [
+      "remote"
+    ],
+    "reference": {
+      "key": "5914a298a3cb66c3.wav",
+      "bytes": 41159324,
+      "source": "Don't Get Me Wrong.reference.wav",
+      "uploaded": [
+        "remote"
       ]
     }
   }

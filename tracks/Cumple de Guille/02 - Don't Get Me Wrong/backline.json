@@ -1,0 +1,45 @@
+{
+  "backline": "0.1.0",
+  "hash": "d5996b51",
+  "song": {
+    "artist": "Pretenders",
+    "title": "Don't Get Me Wrong"
+  },
+  "source": {
+    "kind": "url",
+    "url": "https://www.youtube.com/watch?v=qbAab1hTxN4",
+    "file": "source.webm",
+    "meta": {
+      "id": "qbAab1hTxN4",
+      "title": "Pretenders - Don't Get Me Wrong (Official Music Video)",
+      "track": null,
+      "artist": null,
+      "album": null,
+      "channel": "Pretenders",
+      "uploader": "Pretenders",
+      "duration": 232,
+      "webpage_url": "https://www.youtube.com/watch?v=qbAab1hTxN4",
+      "upload_date": "20200306"
+    }
+  },
+  "job": "/Users/lucasefe/Music/Backline/jobs/Pretenders - Don't Get Me Wrong (d5996b51)",
+  "project": "Don't Get Me Wrong.RPP",
+  "files": {
+    "lyrics": "Don't Get Me Wrong.lrc",
+    "reference": "Don't Get Me Wrong.reference.wav",
+    "drums": "Don't Get Me Wrong.wav"
+  },
+  "timeline": {
+    "count_in_bars": 2,
+    "count_in_seconds": 4.639923,
+    "song_starts_at": 1.499923,
+    "bpm": 103.45,
+    "meter": 4
+  },
+  "lyrics": {
+    "source": "lrclib:33375533",
+    "offset": 5.0,
+    "on_vocal": 0.971
+  },
+  "updated": "2026-10-20T13:15:42"
+}
