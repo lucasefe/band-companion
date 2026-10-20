@@ -14,7 +14,7 @@ from backline.config import Config, load_config, song_folder
 from backline.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and <title>.mid; other profiles get a suffix
-OUTPUT_FORMAT = 6  # bump when the output stage writes different files/content for the same inputs
+OUTPUT_FORMAT = 8  # bump when the output stage writes different files/content for the same inputs
 
 
 @dataclass
@@ -30,6 +30,9 @@ class RunOptions:
     tempo_model: str = "final"
     count_in: int = 2
     count_in_note: int = 37
+    metronome: str = "gaps"  # gaps | always | off
+    metronome_min_bars: int = 1
+    metronome_silence_db: float = -30.0
     keep_other: bool = False
     force: bool = False
     # lyrics
@@ -241,6 +244,7 @@ class _Runner:
 
     def process(self) -> RunResult:
         from backline.audio import duration_seconds
+        from backline.metronome import detect_gaps, gaps_in_seconds, write_metronome
         from backline.midi_out import CountIn, build_sequence, write_midi
         from backline.reaper import (
             ORIGINAL_PAN,
@@ -364,8 +368,20 @@ class _Runner:
             "tempo": "constant",
             "format": OUTPUT_FORMAT,
             "output_dir": str(out_dir),
+            "metronome": [opts.metronome, opts.metronome_min_bars, opts.metronome_silence_db],
         }
         fx_chain = load_fx_template()
+        gaps = (
+            detect_gaps(
+                job.path(J.DRUMS),
+                beats,
+                min_bars=opts.metronome_min_bars,
+                silence_db=opts.metronome_silence_db,
+            )
+            if opts.metronome != "off"
+            else []
+        )
+        gap_info = gaps_in_seconds(gaps, beats, layout.shift)
 
         def do_output() -> dict:
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -378,6 +394,15 @@ class _Runner:
             )
             write_reference(job.path(J.ORIGINAL), outputs["reference"], layout, count_in)
             duration = duration_seconds(job.path(J.ORIGINAL))
+            write_metronome(
+                job.path(J.METRONOME),
+                layout,
+                beats,
+                gaps,
+                mode=opts.metronome,
+                count_in=count_in,
+                tail_seconds=max(0.0, layout.shift + duration - (beats.beats[-1] + layout.shift)),
+            )
             rpp_path = project_target(job)
             write_rpp(
                 rpp_path,
@@ -392,12 +417,21 @@ class _Runner:
                     volume_db=STEM_VOLUME_DB,
                     muted=True,
                 ),
+                # The render is the band's track: metronome hard left, MIDI drums hard right,
+                # so the two can be routed separately (click to in-ears, drums to the PA).
+                metronome=AudioTrack(
+                    name=f"{stem} (metronome)",
+                    file=J.METRONOME,
+                    duration=layout.shift + duration,
+                    position=0.0,
+                    pan=-1.0,
+                ),
                 midi=[
                     MidiTrack(
                         name=f"{stem} (MIDI {profile})",
                         item_name=f"{stem} {profile}",
                         seq=seq,
-                        pan=0.0 if profile == PRIMARY else 1.0,
+                        pan=1.0,
                         muted=profile != PRIMARY,
                         fx_chain=fx_chain,
                     )
@@ -416,7 +450,9 @@ class _Runner:
                 markers=lyric_lines,
                 render=RenderSettings(directory=str(out_dir), pattern=stem),
             )
-            write_record(out_dir, self._song_record(outputs, rpp_path, layout, lyrics_info))
+            write_record(
+                out_dir, self._song_record(outputs, rpp_path, layout, lyrics_info, gap_info)
+            )
             return {
                 "shift": layout.shift,
                 "count_in_seconds": layout.count_in_seconds,
@@ -429,8 +465,14 @@ class _Runner:
             "output",
             output_params,
             do_output,
-            [outputs["midi"], outputs["midi_daring"], outputs["reference"], job.project_path],
-            detail="midi + lrc + reference + rpp",
+            [
+                outputs["midi"],
+                outputs["midi_daring"],
+                outputs["reference"],
+                J.METRONOME,
+                job.project_path,
+            ],
+            detail="midi + lrc + reference + metronome + rpp",
         )
         info = job.stage_info("output")
 
@@ -475,7 +517,7 @@ class _Runner:
             job.save()
         return out
 
-    def _song_record(self, outputs, rpp_path, layout, lyrics_info) -> dict[str, Any]:
+    def _song_record(self, outputs, rpp_path, layout, lyrics_info, gaps) -> dict[str, Any]:
         """What goes into the song folder's backline.json."""
         from backline import __version__
 
@@ -506,6 +548,7 @@ class _Runner:
                 "bpm": layout.bpm,
                 "meter": layout.meter,
             },
+            "metronome": {"mode": self.opts.metronome, "gaps": gaps},
             "lyrics": {
                 "source": lyrics.get("source"),
                 "offset": lyrics.get("offset", 0.0),

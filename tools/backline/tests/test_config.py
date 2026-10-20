@@ -28,7 +28,15 @@ def test_find_config_walks_up(tmp_path: Path):
 
 def test_defaults_without_a_file():
     cfg = Config(
-        path=None, jobs=Path("/x"), tracks=None, default_set=None, count_in_bars=2, count_in_note=37
+        path=None,
+        jobs=Path("/x"),
+        tracks=None,
+        default_set=None,
+        count_in_bars=2,
+        count_in_note=37,
+        metronome="gaps",
+        metronome_min_bars=1,
+        metronome_silence_db=-30.0,
     )
     assert cfg.tracks is None
 

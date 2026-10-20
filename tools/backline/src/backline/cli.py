@@ -81,6 +81,9 @@ def add(
         help="Bars of count-in before the first downbeat; 0 disables. Default from backline.toml.",
     ),
     count_in_note: int | None = typer.Option(None, help="MIDI note for the count-in click."),
+    metronome: str | None = typer.Option(
+        None, help="Metronome in the render: gaps (where the drums stop), always, off."
+    ),
     keep_other: bool = typer.Option(False, help="Also save work/no_drums.wav."),
     force: bool = typer.Option(False, help="Ignore cached artifacts and rerun every stage."),
     lyrics: bool = typer.Option(True, "--lyrics/--no-lyrics", help="Look up lyrics on lrclib.net."),
@@ -111,6 +114,9 @@ def add(
         device=device.value,
         count_in=cfg.count_in_bars if count_in is None else count_in,
         count_in_note=cfg.count_in_note if count_in_note is None else count_in_note,
+        metronome=metronome or cfg.metronome,
+        metronome_min_bars=cfg.metronome_min_bars,
+        metronome_silence_db=cfg.metronome_silence_db,
         keep_other=keep_other,
         force=force,
         lyrics=lyrics,
@@ -130,6 +136,7 @@ def resimplify(
     count_in: int | None = typer.Option(None),
     count_in_note: int | None = typer.Option(None),
     to: Path | None = typer.Option(None, "--to", help="Song folder for the .lrc and the render."),
+    metronome: str | None = typer.Option(None, help="gaps | always | off"),
 ) -> None:
     """Regenerate notes, MIDI, lyrics files and the Reaper project from cached analysis (fast)."""
     from backline.pipeline import resimplify as resimplify_pipeline
@@ -143,6 +150,7 @@ def resimplify(
             count_in=count_in,
             count_in_note=count_in_note,
             deliver_to=to,
+            metronome=metronome,
         )
     )
 

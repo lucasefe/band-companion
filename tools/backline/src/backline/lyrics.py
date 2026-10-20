@@ -103,17 +103,25 @@ _VIDEO_NOISE = re.compile(
     re.I,
 )
 _FEAT = re.compile(r"\s+(feat\.?|ft\.?|featuring)\s+.*$", re.I)
+# A whole " - " segment that is not part of the title: "Ironic - Lyrics", "Song - Official Video".
+_NOISE_SEGMENT = re.compile(
+    r"^(official\s+)?(music\s+)?(video|audio|lyrics?|lyric\s+video|letra|visuali[sz]er|"
+    r"hd|hq|4k|remaster(ed)?|with\s+lyrics)$",
+    re.I,
+)
 
 
 def split_artist_title(name: str) -> tuple[str | None, str]:
     """'Juanes - Fotografia ft. Nelly Furtado (Official Video)' → ('Juanes', 'Fotografia')."""
     s = _VIDEO_NOISE.sub("", _TRACK_NO.sub("", name)).strip()
     s = re.sub(r"\s*\|.*$", "", s)
+    parts = [p.strip() for p in re.split(r"\s+[-–—]\s+", s) if p.strip()]
+    parts = [p for p in parts if not _NOISE_SEGMENT.match(p)] or parts[:1]
     artist: str | None = None
-    for sep in (" - ", " – ", " — ", " | "):
-        if sep in s:
-            artist, s = (p.strip() for p in s.split(sep, 1))
-            break
+    if len(parts) >= 2:
+        artist, s = parts[0], " - ".join(parts[1:])
+    else:
+        s = parts[0] if parts else s
     title = _FEAT.sub("", s).strip(" -–—")
     return artist or None, title
 

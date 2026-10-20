@@ -16,6 +16,9 @@ def _config(tmp_path: Path, tracks: Path | None = None, default_set: str | None 
         default_set=default_set,
         count_in_bars=2,
         count_in_note=37,
+        metronome="gaps",
+        metronome_min_bars=1,
+        metronome_silence_db=-30.0,
     )
 
 
@@ -42,6 +45,7 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
         "output/loop.mid",
         "output/loop (daring).mid",
         "output/loop.reference.wav",
+        J.METRONOME,
         "loop.RPP",
     ):
         assert job.path(rel).exists(), rel
@@ -71,8 +75,18 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
     rpp = result.project_path.read_text()
     assert 'FILE "work/drums.wav"' in rpp and 'FILE "input/original.wav"' in rpp
     assert f'RENDER_FILE "{job.dir / "output"}"' in rpp and 'RENDER_PATTERN "loop"' in rpp
-    original_track = rpp.split("<TRACK")[4]
-    assert "MUTESOLO 1 0 0" in original_track, "original is muted so the render is drums only"
+    tracks = rpp.split("<TRACK")
+    assert 'NAME "loop (metronome)"' in tracks[1] and "VOLPAN 1 -1 -1 -1 1" in tracks[1], (
+        "click hard left"
+    )
+    assert 'FILE "work/metronome.wav"' in tracks[1]
+    assert 'NAME "loop (MIDI conservative)"' in tracks[3] and "VOLPAN 1 1 -1 -1 1" in tracks[3], (
+        "drums hard right"
+    )
+    assert "MUTESOLO 1 0 0" in tracks[5], "original is muted so the render is click + drums only"
+    record = json.loads((result.output_dir / "backline.json").read_text())
+    assert record["metronome"]["mode"] == "gaps"
+    assert isinstance(record["metronome"]["gaps"], list)
 
     again = run(str(loop_wav), opts, config=cfg)
     assert again.timings == {}, "second run is fully cached"

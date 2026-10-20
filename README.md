@@ -21,13 +21,16 @@ Each song folder holds three files on **one timeline** — two bars of count-in,
 ```
 tracks/Cumple de Guille/02 - Fotografía/
 ├── Fotografia.lrc             lyrics; the count-in shows as a countdown, 1 2 3 4 · 1 2 3 4
-├── Fotografia.wav             the drums (your drum instrument, rendered from Reaper)
+├── Fotografia.wav             L: metronome · R: the drums (your instrument, rendered from Reaper)
 ├── Fotografia.reference.wav   the original song, with the same count-in clicks
-└── backline.json              where it came from (URL or file), tempo, count-in, lyrics source
+└── backline.json              where it came from, tempo, count-in, lyrics source, metronome gaps
 ```
 
-The band plays to the drums. The leader can bring the original in underneath at any volume,
-or mute it, without anything going out of sync.
+The band plays to the drums. The **metronome** lives on the left channel of the same file: the
+count-in, then clicks wherever the drums drop out — intros before they enter, breakdowns, stops —
+found automatically from the drum stem, with beat 1 accented so you can count the bar. Left and
+right can be routed separately (click to in-ears, drums to the PA). The leader can bring the
+original in underneath at any volume, or mute it, without anything going out of sync.
 
 ## Setup
 
@@ -104,15 +107,26 @@ what changed.
 
 | Track | Content | Pan | State |
 |---|---|---|---|
+| `<Title> (metronome)` | clicks: count-in, then the gaps (or every beat) | **hard left** | on |
 | `<Title> (drums)` | the real drums (Demucs stem) | hard left | muted — unmute to compare |
-| `<Title> (MIDI conservative)` | the drums as MIDI | centre | on, your VSTi loaded |
+| `<Title> (MIDI conservative)` | the drums as MIDI | **hard right** | on, your VSTi loaded |
 | `<Title> (MIDI daring)` | same, more sensitive detection | hard right | muted, your VSTi loaded |
 | `<Title> (original)` | the song | right | muted — the app mixes the reference in live |
 
 Every lyric line is a marker on the ruler. File → Render is pre-filled: the song folder,
-`<Title>.wav`, 24-bit 44.1 kHz, whole project — so the render is drums only, count-in
-included. **Once Reaper has saved the project, Backline never writes to it again**; a
+`<Title>.wav`, 24-bit 44.1 kHz, whole project — so the render is *L metronome / R drums*,
+count-in included. **Once Reaper has saved the project, Backline never writes to it again**; a
 regeneration goes to `<Title>.new.RPP` beside it.
+
+### The metronome
+
+Per beat, the drum stem's level is compared with the song's usual drum level; a run of at least
+one bar more than 30 dB below it is a gap, widened to bar lines so the click starts on a 1. The
+clicks follow the song's real beats (not a fixed grid), beat 1 is brighter and louder, and later
+beats step up in pitch so a bar can be counted by ear. `backline.json` lists the gaps it found,
+e.g. `bar 2, 10 bars, 3.9–21.3 s` for a guitar intro. Modes in `backline.toml`: `gaps`
+(default), `always` (every beat, louder in the gaps), `off`; `backline resimplify <job>
+--metronome always` switches a song and re-targets the project, then re-render.
 
 *Conservative vs daring:* the conservative MIDI uses the transcriber's default thresholds and
 rarely invents hits but is shy on toms and cymbals; the daring one lowers the thresholds and
@@ -153,6 +167,11 @@ default_set = "Cumple de Guille"
 [count_in]
 bars = 2
 note = 37
+
+[metronome]
+mode = "gaps"            # gaps | always | off
+min_gap_bars = 1
+silence_db = -30
 ```
 
 ## Using the player
@@ -364,6 +383,7 @@ sequenceDiagram
 - `lyrics.py` / `lrclib.py` — identification, lookup, ranking, and the vocal-stem timing check.
 - `midi_out.py` — one `Sequence` (count-in, shift, note ticks) feeds both the `.mid` writer and the Reaper project, so they can never disagree.
 - `reference.py` — the original on the count-in timeline, clicks synthesized.
+- `metronome.py` — gaps from the drum stem's per-beat level; clicks on the real beats, into the project's left channel.
 - `reaper.py` — the practice-mix project, your FX chain, render settings, lyric markers.
 - `pipeline.py` — stages with per-job caching; `config.py` — `backline.toml` and song folders.
 

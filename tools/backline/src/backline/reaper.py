@@ -58,6 +58,7 @@ def write_rpp(
     stem: AudioTrack,
     midi: list[MidiTrack],
     original: AudioTrack | None = None,
+    metronome: AudioTrack | None = None,
     markers: list[tuple[float, str]] | None = None,
     render: RenderSettings | None = None,
 ) -> None:
@@ -82,6 +83,8 @@ def write_rpp(
         ]
     for i, (seconds, text) in enumerate(markers or [], start=1):
         lines.append(f"  MARKER {i} {_num(max(seconds, 0.0))} {_quote(text)} 0")
+    if metronome is not None:
+        lines += _audio_track(metronome)
     lines += _audio_track(stem)
     for m in midi:
         lines += _midi_track(m)

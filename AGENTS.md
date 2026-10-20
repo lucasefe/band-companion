@@ -6,8 +6,8 @@ One repo, two halves, one contract between them:
   + R2. The leader phone plays into the console; followers see the lyrics live. No framework,
   no unit tests, no lint config; `scripts/browser-check.mjs` is the regression suite.
 - **Importer** (`tools/backline/`, Python 3.12, uv): `backline add <song>` → song folder.
-- **`tracks/<set>/<NN - Title>/`**: `Title.lrc`, `Title.wav` (drums, rendered by the user in
-  Reaper), `Title.reference.wav` (the original) — all on one timeline, count-in first.
+- **`tracks/<set>/<NN - Title>/`**: `Title.lrc`, `Title.wav` (L metronome / R drums, rendered by
+  the user in Reaper), `Title.reference.wav` (the original) — all on one timeline, count-in first.
 
 The name was Band Companion; the deployed worker (`wrangler.jsonc` `name`), the R2 bucket and
 the leader-key localStorage key keep that name on purpose (URL, uploaded audio, signed-in
@@ -95,8 +95,10 @@ src/backline/
   lyrics.py / lrclib.py   identification, LRCLIB lookup + ranking, vocal-stem offset check, LRC I/O
   midi_out.py   CountIn, TempoMap, Layout, build_sequence() → Sequence; write_midi()
   reference.py  original + synthesized count-in clicks on the output timeline, 16-bit
-  reaper.py     project (stem muted L, MIDI centre + FX template, daring muted R, original muted),
-                markers, RENDER_* settings; extract_fx_chain(); is_generated()
+  metronome.py  detect_gaps() from per-beat drum-stem RMS (snapped to bars); write_metronome()
+                on the real beat times (modes gaps/always/off) → work/metronome.wav, mono
+  reaper.py     project (metronome hard L, stem muted L, MIDI hard R + FX template, daring muted R,
+                original muted), markers, RENDER_* settings; extract_fx_chain(); is_generated()
 tests/          pytest; fixtures/make_loop.py synthesizes a 100 BPM loop; tests pass an explicit
                 Config so nothing ever lands in the real tracks/
 ```
@@ -114,8 +116,12 @@ Rules:
   artifact list. Params must be JSON-round-trippable. `OUTPUT_FORMAT` is part of the output
   stage's params: bump it when the output stage changes what it writes for the same inputs.
 - **One `Sequence`, every renderer.** `build_sequence()` is the single source of truth for ticks;
-  `write_midi()`, `reaper.py`, the `.lrc` files and `reference.py` all derive from the same
-  `Layout`. Never compute timing in a renderer.
+  `write_midi()`, `reaper.py`, the `.lrc` files, `reference.py` and `metronome.py` all derive from
+  the same `Layout`. Never compute timing in a renderer. The metronome follows `beats.json`'s real
+  beat times (the song drifts), the MIDI a constant tempo — both are in song time + `shift`.
+- **The metronome is baked into the render on purpose** (project track hard left, MIDI drums hard
+  right): no third element to keep in sync in the player, and L/R can be routed separately. The
+  player plays `Title.wav` as-is.
 - **Song time vs output time.** `notes.json`, `beats.json`, `lyrics.json` are in song time; the
   output stage adds `Layout.shift`. The count-in ends exactly on the first downbeat.
 - **Lyrics never fail the run**: a miss is written to `lyrics.json` (`found: false`) and cached.

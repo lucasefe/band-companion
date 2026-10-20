@@ -68,6 +68,10 @@ def test_countdown_lines_tick_once_per_click():
         ("03. Artist – Title (Official Video)", ("Artist", "Title")),
         ("Song Title [Official Audio]", (None, "Song Title")),
         ("NoPodras", (None, "NoPodras")),
+        ("Alanis Morissette - Ironic - Lyrics", ("Alanis Morissette", "Ironic")),
+        ("Bryan Adams - Summer Of '69 (Official Music Video)", ("Bryan Adams", "Summer Of '69")),
+        ("Band - Song - Official Audio", ("Band", "Song")),
+        ("Lyrics", (None, "Lyrics")),
     ],
 )
 def test_split_artist_title(name, expected):

@@ -17,13 +17,15 @@ CLICK_LEVEL = 0.5
 ACCENT_LEVEL = 0.7
 
 
-def click(sr: int, *, accent: bool) -> np.ndarray:
-    """A short decaying tone, brighter and louder on the downbeat."""
+def click(
+    sr: int, *, accent: bool = False, pitch: float | None = None, level: float | None = None
+) -> np.ndarray:
+    """A short decaying tone; by default brighter and louder on the downbeat."""
     n = int(CLICK_SECONDS * sr)
     t = np.arange(n) / sr
-    tone = np.sin(2 * np.pi * (ACCENT_HZ if accent else CLICK_HZ) * t)
-    env = np.exp(-t * 90)
-    return (tone * env * (ACCENT_LEVEL if accent else CLICK_LEVEL)).astype(np.float32)
+    hz = pitch if pitch is not None else (ACCENT_HZ if accent else CLICK_HZ)
+    amp = level if level is not None else (ACCENT_LEVEL if accent else CLICK_LEVEL)
+    return (np.sin(2 * np.pi * hz * t) * np.exp(-t * 90) * amp).astype(np.float32)
 
 
 def write_reference(
