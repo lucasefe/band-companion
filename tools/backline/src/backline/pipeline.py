@@ -9,16 +9,19 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from backline import job as J
+from backline.config import Config, load_config, song_folder
 from backline.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and <title>.mid; other profiles get a suffix
-OUTPUT_FORMAT = 4  # bump when the output stage writes different files/content for the same inputs
+OUTPUT_FORMAT = 5  # bump when the output stage writes different files/content for the same inputs
 
 
 @dataclass
 class RunOptions:
     out_root: Path = DEFAULT_ROOT
-    deliver_to: Path | None = None  # a Band Companion song folder for the .lrc and the render
+    deliver_to: Path | None = None  # explicit song folder for .lrc, reference and the render
+    set_name: str | None = None  # else tracks/<set>/<NN - Title> from backline.toml
+    number: int | None = None
     quality: str = "fast"
     style: str = "raw"
     grid: int = 16
@@ -59,12 +62,17 @@ class RunResult:
     lyrics: dict[str, Any]  # contents of lyrics.json
     project_path: Path
     output_dir: Path
-    outputs: dict[str, Path]  # lrc / midi / render target
+    outputs: dict[str, Path]  # lrc / reference / midi / render target
     fx_chain: bool
     timings: dict[str, float] = field(default_factory=dict)
 
 
-def run(source: str, opts: RunOptions, reporter: Reporter | None = None) -> RunResult:
+def run(
+    source: str,
+    opts: RunOptions,
+    reporter: Reporter | None = None,
+    config: Config | None = None,
+) -> RunResult:
     from backline.ingest import (
         ingest_file,
         ingest_url,
@@ -86,7 +94,7 @@ def run(source: str, opts: RunOptions, reporter: Reporter | None = None) -> RunR
             source=canonical,
             hash=source_hash(canonical),
         )
-        runner = _Runner(job, opts, reporter)
+        runner = _Runner(job, opts, reporter, config=config)
 
         def do_ingest_url() -> dict:
             downloaded = ingest_url(
@@ -117,7 +125,7 @@ def run(source: str, opts: RunOptions, reporter: Reporter | None = None) -> RunR
             source=str(src),
             hash=source_hash(src),
         )
-        runner = _Runner(job, opts, reporter)
+        runner = _Runner(job, opts, reporter, config=config)
 
         def do_ingest_file() -> dict:
             copy = job.path(J.INPUT) / f"source{src.suffix.lower()}"
@@ -131,18 +139,28 @@ def run(source: str, opts: RunOptions, reporter: Reporter | None = None) -> RunR
     return runner.process()
 
 
-def resimplify(job_dir: Path, reporter: Reporter | None = None, **overrides: Any) -> RunResult:
+def resimplify(
+    job_dir: Path,
+    reporter: Reporter | None = None,
+    config: Config | None = None,
+    **overrides: Any,
+) -> RunResult:
     """Rerun from `simplify` on with the job's saved options plus any overrides."""
     job = Job.open(job_dir)
     opts = options_from_job(job, **overrides)
-    return _Runner(job, opts, reporter or NullReporter()).process()
+    return _Runner(job, opts, reporter or NullReporter(), config=config).process()
 
 
-def redo_lyrics(job_dir: Path, reporter: Reporter | None = None, **overrides: Any) -> RunResult:
+def redo_lyrics(
+    job_dir: Path,
+    reporter: Reporter | None = None,
+    config: Config | None = None,
+    **overrides: Any,
+) -> RunResult:
     """Force the lyrics stage (and therefore the outputs) with the saved options plus overrides."""
     job = Job.open(job_dir)
     opts = options_from_job(job, **overrides)
-    return _Runner(job, opts, reporter or NullReporter(), rerun={"lyrics"}).process()
+    return _Runner(job, opts, reporter or NullReporter(), rerun={"lyrics"}, config=config).process()
 
 
 def options_from_job(job: Job, **overrides: Any) -> RunOptions:
@@ -175,12 +193,18 @@ class _Runner:
     """Executes stages in order; once a stage runs, every later stage runs too."""
 
     def __init__(
-        self, job: Job, opts: RunOptions, reporter: Reporter, rerun: set[str] | None = None
+        self,
+        job: Job,
+        opts: RunOptions,
+        reporter: Reporter,
+        rerun: set[str] | None = None,
+        config: Config | None = None,
     ) -> None:
         self.job = job
         self.opts = opts
         self.reporter = reporter
         self.rerun = rerun or set()
+        self.config = config or load_config()
         self.dirty = opts.force
         self.timings: dict[str, float] = {}
         job.manifest["options"] = {
@@ -226,6 +250,7 @@ class _Runner:
             load_fx_template,
             write_rpp,
         )
+        from backline.reference import write_reference
         from backline.separate import MODELS, separate
         from backline.simplify import (
             PROFILES,
@@ -321,10 +346,11 @@ class _Runner:
         song_lines = [(t, text) for t, text in lyrics_info.get("lines_song_time", [])]
         lyric_lines = [(t + layout.shift, text) for t, text in song_lines]
 
-        out_dir = job.output_dir(opts.deliver_to)
+        out_dir = self._resolve_output_dir()
         stem = job.file_stem
         outputs = {
             "lrc": out_dir / f"{stem}.lrc",
+            "reference": out_dir / f"{stem}.reference.wav",
             "render": out_dir / f"{stem}.wav",
             "midi": job.path(J.OUTPUT) / f"{stem}.mid",
             "midi_daring": job.path(J.OUTPUT) / f"{stem} (daring).mid",
@@ -335,7 +361,7 @@ class _Runner:
             "count_in_note": opts.count_in_note,
             "tempo": "constant",
             "format": OUTPUT_FORMAT,
-            "deliver_to": str(opts.deliver_to) if opts.deliver_to else None,
+            "output_dir": str(out_dir),
         }
         fx_chain = load_fx_template()
 
@@ -348,6 +374,7 @@ class _Runner:
             self._write_lrc_files(
                 outputs["lrc"], lyrics_info, song_lines, lyric_lines, layout, count_in
             )
+            write_reference(job.path(J.ORIGINAL), outputs["reference"], layout, count_in)
             duration = duration_seconds(job.path(J.ORIGINAL))
             rpp_path = project_target(job)
             write_rpp(
@@ -374,6 +401,7 @@ class _Runner:
                     )
                     for profile, seq in seqs.items()
                 ],
+                # Muted so the render is drums only; the app mixes the reference in live.
                 original=AudioTrack(
                     name=f"{stem} (original)",
                     file=J.ORIGINAL,
@@ -381,6 +409,7 @@ class _Runner:
                     position=layout.shift,
                     pan=ORIGINAL_PAN,
                     volume_db=ORIGINAL_VOLUME_DB,
+                    muted=True,
                 ),
                 markers=lyric_lines,
                 render=RenderSettings(directory=str(out_dir), pattern=stem),
@@ -397,8 +426,8 @@ class _Runner:
             "output",
             output_params,
             do_output,
-            [outputs["midi"], outputs["midi_daring"], job.project_path],
-            detail="midi + lrc + rpp",
+            [outputs["midi"], outputs["midi_daring"], outputs["reference"], job.project_path],
+            detail="midi + lrc + reference + rpp",
         )
         info = job.stage_info("output")
 
@@ -414,6 +443,27 @@ class _Runner:
             fx_chain=bool(info.get("fx_chain")),
             timings=self.timings,
         )
+
+    def _resolve_output_dir(self) -> Path:
+        """--to wins; else tracks/<set>/<NN - Title> from the config; else the job's output/.
+
+        The result is saved into the job's options so later reruns land in the same folder
+        even if other songs were added to the set in between.
+        """
+        job, opts, cfg = self.job, self.opts, self.config
+        if opts.deliver_to:
+            out = job.output_dir(opts.deliver_to)
+        elif cfg.tracks and (opts.set_name or cfg.default_set):
+            out = song_folder(
+                cfg.tracks, opts.set_name or cfg.default_set, job.file_stem, opts.number
+            )
+        else:
+            out = job.output_dir()
+        if out != job.output_dir():
+            opts.deliver_to = out
+            job.manifest["options"]["deliver_to"] = str(out)
+            job.save()
+        return out
 
     def _do_lyrics(self) -> dict:
         """Find lyrics, check their timing against the vocal stem, write lyrics.{json,txt}.

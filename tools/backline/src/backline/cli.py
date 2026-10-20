@@ -16,7 +16,6 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn
 from rich.table import Column, Table
 
 from backline import __version__
-from backline.job import DEFAULT_ROOT
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console(stderr=True)
@@ -53,14 +52,21 @@ def main(
 
 
 @app.command()
-def run(
+def add(
     source: str = typer.Argument(..., help="Audio file (wav, mp3, m4a, flac, aiff, ogg) or URL."),
-    out: Path = typer.Option(DEFAULT_ROOT, "--out", "-o", help="Root folder for job folders."),
+    set_name: str | None = typer.Option(
+        None, "--set", help="Set (tab) to add the song to; default from backline.toml."
+    ),
+    number: int | None = typer.Option(
+        None, "--number", "-n", help="Position in the set; default: next free number."
+    ),
     to: Path | None = typer.Option(
+        None, "--to", help="Explicit song folder instead of tracks/<set>/<NN - Title>."
+    ),
+    jobs: Path | None = typer.Option(
         None,
-        "--to",
-        help="Deliver the .lrc and target the render into this song folder "
-        "(e.g. a Band Companion tracks/<set>/<NN - Title>/) instead of the job's output/.",
+        "--jobs",
+        help="Where to keep input/, work/ and the project; default from backline.toml.",
     ),
     quality: Quality = typer.Option(
         Quality.fast, help="Demucs model: fast=htdemucs, best=htdemucs_ft (~4x slower)."
@@ -70,15 +76,16 @@ def run(
         16, help="Quantization grid: 8, 16, 12 (triplet 8ths), 24 (triplet 16ths)."
     ),
     device: Device = typer.Option(Device.auto, help="Compute device for Demucs and Beat This!."),
-    count_in: int = typer.Option(2, help="Bars of count-in before the first downbeat; 0 disables."),
-    count_in_note: int = typer.Option(
-        37, help="MIDI note for the count-in click (37 = GM side stick)."
+    count_in: int | None = typer.Option(
+        None,
+        help="Bars of count-in before the first downbeat; 0 disables. Default from backline.toml.",
     ),
-    keep_other: bool = typer.Option(False, help="Also save no_drums.wav."),
+    count_in_note: int | None = typer.Option(None, help="MIDI note for the count-in click."),
+    keep_other: bool = typer.Option(False, help="Also save work/no_drums.wav."),
     force: bool = typer.Option(False, help="Ignore cached artifacts and rerun every stage."),
     lyrics: bool = typer.Option(True, "--lyrics/--no-lyrics", help="Look up lyrics on lrclib.net."),
-    artist: str | None = typer.Option(None, help="Artist name for the lyrics lookup."),
-    title: str | None = typer.Option(None, help="Song title for the lyrics lookup."),
+    artist: str | None = typer.Option(None, help="Artist name (overrides tags / YouTube title)."),
+    title: str | None = typer.Option(None, help="Song title (overrides tags / YouTube title)."),
     lyrics_file: Path | None = typer.Option(
         None, "--lyrics-file", help="Use this .lrc/.txt instead of looking lyrics up."
     ),
@@ -86,19 +93,24 @@ def run(
         None, help="Shift lyrics by this many seconds instead of measuring against the vocals."
     ),
 ) -> None:
-    """Analyse SOURCE (audio file or YouTube URL) and write MIDI, lyrics and a Reaper project."""
+    """Add a song: analyse SOURCE and write the lyrics, the reference track and the Reaper
+    project that renders the drums into the song's folder."""
+    from backline.config import load_config
     from backline.pipeline import RunOptions
     from backline.pipeline import run as run_pipeline
 
+    cfg = load_config()
     opts = RunOptions(
-        out_root=out.expanduser(),
+        out_root=(jobs or cfg.jobs).expanduser(),
         deliver_to=to,
+        set_name=set_name,
+        number=number,
         quality=quality.value,
         style=style.value,
         grid=grid,
         device=device.value,
-        count_in=count_in,
-        count_in_note=count_in_note,
+        count_in=cfg.count_in_bars if count_in is None else count_in,
+        count_in_note=cfg.count_in_note if count_in_note is None else count_in_note,
         keep_other=keep_other,
         force=force,
         lyrics=lyrics,
@@ -107,7 +119,7 @@ def run(
         lyrics_file=lyrics_file,
         lyrics_offset=lyrics_offset,
     )
-    _execute(lambda reporter: run_pipeline(source, opts, reporter))
+    _execute(lambda reporter: run_pipeline(source, opts, reporter, cfg))
 
 
 @app.command()
@@ -282,19 +294,20 @@ def _print_summary(result) -> None:
     elif not result.fx_chain:
         project_note = "  [dim](no drum VSTi template yet; see `backline fx-template`)[/]"
     table.add_row("project", escape(str(result.project_path)) + project_note)
-    table.add_row("output", escape(str(result.output_dir)))
+    table.add_row("song folder", escape(str(result.output_dir)))
+    have = [result.outputs["reference"].name]
+    if result.lyrics.get("found"):
+        have.insert(0, result.outputs["lrc"].name)
+    table.add_row("  written", "  ".join(escape(n) for n in have))
+    table.add_row("  to render", escape(result.outputs["render"].name))
     console.print()
     console.print(table)
     console.print()
     console.print(
         "[bold]Next:[/] open the project, File → Render (pre-filled) → "
-        f"[bold]{escape(result.outputs['render'].name)}[/] lands next to "
-        f"[bold]{escape(result.outputs['lrc'].name)}[/]"
-        + (
-            ""
-            if result.lyrics.get("found")
-            else "  [yellow](no lyrics were found, so there is no .lrc)[/]"
-        )
+        f"[bold]{escape(result.outputs['render'].name)}[/] completes the song folder; "
+        "then `mise run sync-audio`."
+        + ("" if result.lyrics.get("found") else "  [yellow](no lyrics were found)[/]")
     )
 
 

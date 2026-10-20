@@ -4,13 +4,26 @@ from pathlib import Path
 import pytest
 
 from backline import job as J
+from backline.config import Config
 from backline.pipeline import RunOptions, resimplify, run
+
+
+def _config(tmp_path: Path, tracks: Path | None = None, default_set: str | None = None) -> Config:
+    return Config(
+        path=None,
+        jobs=tmp_path / "jobs",
+        tracks=tracks,
+        default_set=default_set,
+        count_in_bars=2,
+        count_in_note=37,
+    )
 
 
 @pytest.mark.slow
 def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
-    opts = RunOptions(out_root=tmp_path / "jobs", device="cpu", lyrics=False)
-    result = run(str(loop_wav), opts)
+    cfg = _config(tmp_path)
+    opts = RunOptions(out_root=cfg.jobs, device="cpu", lyrics=False)
+    result = run(str(loop_wav), opts, config=cfg)
     job = result.job
 
     assert job.dir.parent == tmp_path / "jobs"
@@ -28,6 +41,7 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
         "work/notes-daring.json",
         "output/loop.mid",
         "output/loop (daring).mid",
+        "output/loop.reference.wav",
         "loop.RPP",
     ):
         assert job.path(rel).exists(), rel
@@ -52,18 +66,38 @@ def test_full_pipeline_on_loop(loop_wav: Path, tmp_path: Path):
     }
     assert result.lyrics == {"found": False, "lines_song_time": [], "reason": "disabled"}
     assert result.project_path == job.dir / "loop.RPP"
+    assert result.output_dir == job.dir / "output", "no tracks folder configured → output/"
     assert result.outputs["render"] == job.dir / "output" / "loop.wav"
     rpp = result.project_path.read_text()
     assert 'FILE "work/drums.wav"' in rpp and 'FILE "input/original.wav"' in rpp
     assert f'RENDER_FILE "{job.dir / "output"}"' in rpp and 'RENDER_PATTERN "loop"' in rpp
+    original_track = rpp.split("<TRACK")[4]
+    assert "MUTESOLO 1 0 0" in original_track, "original is muted so the render is drums only"
 
-    again = run(str(loop_wav), opts)
+    again = run(str(loop_wav), opts, config=cfg)
     assert again.timings == {}, "second run is fully cached"
 
     deliver = tmp_path / "tracks" / "Set" / "03 - Loop"
-    re = resimplify(job.dir, count_in=0, deliver_to=deliver)
+    re = resimplify(job.dir, config=cfg, count_in=0, deliver_to=deliver)
     assert set(re.timings) == {"output"}, "saved options are reused; only count_in/--to changed"
     assert re.layout.shift == 0
     assert re.output_dir == deliver and deliver.is_dir()
+    assert (deliver / "loop.reference.wav").exists()
     assert re.outputs["midi"] == job.dir / "output" / "loop.mid", "MIDI stays in the job"
     assert f'RENDER_FILE "{deliver}"' in result.project_path.read_text()
+
+    again = resimplify(job.dir, config=cfg)
+    assert again.timings == {} and again.output_dir == deliver, "the folder sticks"
+
+
+@pytest.mark.slow
+def test_song_folder_comes_from_the_config(loop_wav: Path, tmp_path: Path):
+    tracks = tmp_path / "tracks"
+    (tracks / "Gig" / "01 - Opener").mkdir(parents=True)
+    cfg = _config(tmp_path, tracks=tracks, default_set="Gig")
+    result = run(
+        str(loop_wav), RunOptions(out_root=cfg.jobs, device="cpu", lyrics=False), config=cfg
+    )
+    assert result.output_dir == tracks / "Gig" / "02 - loop"
+    assert (result.output_dir / "loop.reference.wav").exists()
+    assert result.job.manifest["options"]["deliver_to"] == str(result.output_dir)
