@@ -70,10 +70,11 @@ export class Player {
   }
 
   // Loads the track without playing it. Selecting the current track is a no-op.
-  select(track: Track): void {
+  // `src` is what the element plays (a blob: URL of the downloaded file on the leader).
+  select(track: Track, src: string = track.url): void {
     if (this.state.track?.id === track.id && this.state.status !== 'error') return
     this.audio.pause()
-    this.audio.src = track.url
+    this.audio.src = src
     this.audio.load()
     this.patch({ status: 'paused', track, currentTime: 0, duration: 0, error: null })
     this.updateMediaSession(track)

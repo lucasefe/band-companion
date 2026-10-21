@@ -201,13 +201,13 @@ Everyone opens the same URL and starts as a follower.
 ### Leader
 
 1. Tap **Lead** at the top and enter the leader key. The device switches to the player.
-2. **Tap a song** to load it. Nothing plays yet; the transport appears at the bottom and, if the song has lyrics, they open. **‹ Songs** goes back to the list (on an iPad the list and the lyrics sit side by side).
+2. **Tap a song** to load it. The leader never streams: a song that is not on the device yet is downloaded first (the row shows *Downloading 42 %*; songs not yet downloaded are marked), then loaded. Nothing plays yet; the transport appears at the bottom and, if the song has lyrics, they open. **‹ Songs** goes back to the list (on an iPad the list and the lyrics sit side by side).
 3. **Play** starts the track, or resumes from where you paused. **Pause** keeps the position. **Restart** goes back to the top; if it was playing it keeps playing.
 4. To jump somewhere, **tap a lyric line** and playback moves to it, or **tap or drag the progress bar** (the time shows where you'll land; it seeks when you let go). Followers jump along. Scrolling the lyrics never seeks, and the list stops auto-scrolling for a few seconds while you read ahead.
-5. **Reference.** When a song has one, a row appears above the transport: tap **Reference off** to bring the original song in under the drums, set its level with the slider, **Mute** to drop it without losing sync. Off by default; the choice and the level are remembered on the device. Nothing is downloaded until it is turned on.
+5. **Reference.** When a song has one, a row appears above the transport: tap **Reference off** to bring the original song in under the drums (it downloads first if needed), set its level with the slider, **Mute** to drop it without losing sync. Off by default; the choice and the level are remembered on the device.
 6. Loading another song unloads the current one. When a track ends it rewinds and waits.
 
-The chips at the top show status: **Offline · xx MB** (all tracks stored on the device) or **Download N tracks** (tap to store them; references are included when Reference is on), **Awake** (screen won't lock), and **Leader · N** (connected, N followers; it reads **Leader · offline** when the room can't be reached). Tap **Leader** to step down.
+The chips at the top show status: **Offline · xx MB** (all tracks stored on the device) or **Download N tracks** (tap to store them all at once; references are included when Reference is on), **Awake** (screen won't lock), and **Leader · N** (connected, N followers; it reads **Leader · offline** when the room can't be reached). Tap **Leader** to step down.
 
 There is only one leader. If a second device enters the key, the first one drops back to following and says so. The leader keeps playing with no internet; followers keep running on the last position they heard and catch up as soon as it is back.
 
@@ -413,7 +413,7 @@ sequenceDiagram
 - `src/tracks.ts` builds the song list from `audio.json` plus the `.lrc`/`.txt` files found with `import.meta.glob`. Audio URLs are `/audio/<hash>.wav`.
 - `worker/index.ts` streams audio from R2 with byte-range support (Safari needs it) and hands `/ws` to `worker/room.ts`, a Durable Object holding one room: the leader's socket pushes `{ track, playing, position }` on every change and every two seconds while playing; follower sockets receive it, and late joiners get the last state.
 - `src/sync.ts` is the client side: `Broadcaster` for the leader, `Follower` for everyone else. Followers run the position on their own clock between updates, which is plenty for lyric lines. Both reconnect with backoff and when the app returns to the foreground.
-- `src/player.ts` wraps the main `<audio>` element. Playback starts synchronously inside the tap handler, which iOS requires.
+- `src/player.ts` wraps the main `<audio>` element. Playback starts synchronously inside the tap handler, which iOS requires. On the leader the element plays a `blob:` URL of the downloaded file (`src/offline.ts` `ensureCached` + `cachedBlobUrl`), never a network stream, so the service worker and its range slicing are out of the audio path.
 - `src/reference.ts` is the leader's optional second `<audio>`, locked to the main one on play, pause, seek and drift, and routed through a Web Audio gain node — iOS ignores `audio.volume`, a gain node it respects. Built inside the tap that turns it on.
 - `src/lyrics.ts` parses LRC; `src/lyrics-view.ts` highlights and scrolls the current line every frame.
 - `src/monitor.ts` is the follower's optional audio: a second `<audio>` element that loads the leader's track and seeks whenever it drifts more than half a second from the extrapolated position.

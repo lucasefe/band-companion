@@ -2,12 +2,19 @@ import { registerSW } from 'virtual:pwa-register'
 import './styles.css'
 import { FollowUI } from './follow-ui'
 import { Monitor } from './monitor'
-import { cachedTrackIds, downloadTracks, offlineSupported, storageUsage } from './offline'
+import {
+  cachedBlobUrl,
+  cachedTrackIds,
+  downloadTracks,
+  ensureCached,
+  offlineSupported,
+  storageUsage,
+} from './offline'
 import { Player } from './player'
 import { Reference } from './reference'
 import { leaderKey, setLeaderKey } from './role'
 import { Broadcaster, Follower } from './sync'
-import { allTracks, loadSets } from './tracks'
+import { allTracks, loadSets, type Track } from './tracks'
 import { UI } from './ui'
 import { keepAwake, subscribeWakeLock } from './wakelock'
 
@@ -19,8 +26,18 @@ const referenceEl = document.getElementById('reference') as HTMLAudioElement
 const sets = loadSets()
 const tracks = allTracks(sets)
 const player = new Player(audioEl)
+
+// The leader plays only from the offline cache: streaming 60 MB WAVs over venue Wi-Fi
+// stutters, and a blob: URL keeps the service worker's range slicing out of the audio path.
+async function localSource(url: string): Promise<string> {
+  await ensureCached([url])
+  const src = await cachedBlobUrl(url)
+  if (!src) throw new Error('Not available offline')
+  return src
+}
+
 // Created once: a MediaElementSource can only ever be attached to an element once.
-const reference = new Reference(referenceEl, audioEl)
+const reference = new Reference(referenceEl, audioEl, localSource)
 
 let updateSW: ((reload?: boolean) => Promise<void>) | null = null
 let updateAvailable = false
@@ -48,11 +65,42 @@ function mount(): void {
 
 function mountLeader(key: string): Mounted {
   let downloading = false
+  let selecting = 0 // token: a later tap wins over a download still in flight
+  let currentSrc: string | null = null
+
+  async function selectTrack(track: Track): Promise<void> {
+    if (player.getState().track?.id === track.id && player.getState().status !== 'error') return
+    const token = ++selecting
+    const urls = [track.url]
+    if (reference.isEnabled() && track.reference) urls.push(track.reference.url)
+    try {
+      ui.updateDownloading(track.id, { loaded: 0, total: 0 })
+      await ensureCached(urls, (progress) => {
+        if (token === selecting) ui.updateDownloading(track.id, progress)
+      })
+      if (token !== selecting) return
+      const src = await cachedBlobUrl(track.url)
+      if (!src) throw new Error('Not available offline')
+      if (token !== selecting) {
+        URL.revokeObjectURL(src)
+        return
+      }
+      if (currentSrc) URL.revokeObjectURL(currentSrc)
+      currentSrc = src
+      player.select(track, src)
+      ui.updateDownloading(track.id, null)
+      void refreshOfflineStatus()
+    } catch (err) {
+      if (token !== selecting) return
+      const message = err instanceof Error ? err.message : 'Download failed'
+      ui.updateDownloading(track.id, null, navigator.onLine ? message : 'Offline')
+    }
+  }
 
   const ui = new UI(root, sets, {
     onSelect(track) {
       keepAwake()
-      player.select(track)
+      void selectTrack(track)
     },
     onPlay() {
       keepAwake()
@@ -131,6 +179,7 @@ function mountLeader(key: string): Mounted {
     }
     ui.updateOffline({ kind: 'checking' })
     const cached = await cachedTrackIds(tracks)
+    ui.updateDownloads(cached)
     const missing = tracks.length - cached.size
     if (missing === 0) ui.updateOffline({ kind: 'ready', usage: await storageUsage() })
     else ui.updateOffline({ kind: 'missing', count: missing })

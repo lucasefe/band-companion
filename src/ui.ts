@@ -258,14 +258,47 @@ export class UI {
     this.nowPlaying.classList.toggle('is-playing', playing)
   }
 
+  // Leader only: which songs are on the device. Playing always goes through the cache.
+  updateDownloads(cached: Set<string>): void {
+    for (const [id, button] of this.songButtons) {
+      const label = button.querySelector('.song-dl')
+      if (!label || button.classList.contains('is-downloading')) continue
+      const has = cached.has(id)
+      button.classList.toggle('is-missing', !has)
+      label.textContent = has ? '' : 'Not downloaded'
+    }
+  }
+
+  updateDownloading(trackId: string, progress: { loaded: number; total: number } | null, error?: string): void {
+    const button = this.songButtons.get(trackId)
+    const label = button?.querySelector('.song-dl')
+    if (!button || !label) return
+    button.classList.toggle('is-downloading', progress !== null)
+    if (error) {
+      button.classList.remove('is-downloading')
+      label.textContent = error
+      return
+    }
+    if (progress === null) {
+      button.classList.remove('is-missing')
+      label.textContent = ''
+      return
+    }
+    label.textContent = progress.total > 0 ? `Downloading ${Math.round((progress.loaded / progress.total) * 100)} %` : 'Downloading\u2026'
+  }
+
   updateReference(state: ReferenceState): void {
     this.referenceRow.hidden = !state.available
     const chip = this.referenceChip
-    chip.classList.remove('is-ok', 'is-warn')
+    chip.classList.remove('is-ok', 'is-warn', 'is-busy')
     chip.setAttribute('aria-pressed', String(state.status !== 'off'))
     switch (state.status) {
       case 'off':
         chip.textContent = 'Reference off'
+        break
+      case 'loading':
+        chip.textContent = 'Downloading reference\u2026'
+        chip.classList.add('is-busy')
         break
       case 'on':
         chip.textContent = 'Reference'
@@ -454,7 +487,10 @@ export class UI {
       const button = el('button', { class: 'song', type: 'button', 'aria-pressed': 'false' }, [
         el('span', { class: 'song-index', text: String(index + 1) }),
         el('span', { class: 'song-text' }, text),
-        el('span', { class: 'song-state' }),
+        el('span', { class: 'song-side' }, [
+          el('span', { class: 'song-dl' }),
+          el('span', { class: 'song-state' }),
+        ]),
       ])
       button.addEventListener('click', () => {
         this.handlers.onSelect(track)

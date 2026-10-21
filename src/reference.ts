@@ -5,7 +5,11 @@ import type { Track } from './tracks'
 // ignores HTMLMediaElement.volume. Off by default; nothing is loaded until turned on.
 //
 // 'blocked': the browser refused to start playback outside a tap (turn it on again from one).
-export type ReferenceStatus = 'off' | 'on' | 'blocked' | 'error'
+export type ReferenceStatus = 'off' | 'loading' | 'on' | 'blocked' | 'error'
+
+// Turns a track's reference URL into something the element can play; on the leader this
+// downloads the file into the offline cache first and returns a blob: URL.
+export type SourceResolver = (url: string) => Promise<string>
 
 export interface ReferenceState {
   available: boolean // the current track has a reference file
@@ -42,7 +46,9 @@ type Listener = (state: ReferenceState) => void
 export class Reference {
   private readonly audio: HTMLAudioElement
   private readonly main: HTMLAudioElement
+  private readonly resolve: SourceResolver
   private readonly listeners = new Set<Listener>()
+  private loadToken = 0
   private ctx: AudioContext | null = null
   private gain: GainNode | null = null
   private track: Track | null = null
@@ -53,9 +59,10 @@ export class Reference {
   private drift: number | null = null // smoothed main − reference, seconds (> 0: reference late)
   private nudging = 0 // -1, 0, +1
 
-  constructor(audio: HTMLAudioElement, main: HTMLAudioElement) {
+  constructor(audio: HTMLAudioElement, main: HTMLAudioElement, resolve: SourceResolver = async (u) => u) {
     this.audio = audio
     this.main = main
+    this.resolve = resolve
     const stored = load()
     this.enabled = stored.enabled
     this.state = { available: false, status: 'off', muted: stored.muted, volume: stored.volume }
@@ -130,17 +137,14 @@ export class Reference {
     this.persist()
     this.ensureGraph()
     void this.ctx?.resume()
+    // Inside the tap: mark the element as user-started so later programmatic play() calls
+    // (after the download) are allowed.
+    this.unlock()
     if (!this.track?.reference) {
-      // Nothing to play yet; mark the element as user-started for later programmatic play().
-      this.audio.play().catch(() => {})
-      this.audio.pause()
       this.setStatus('on')
       return
     }
     this.load()
-    this.setStatus('on')
-    if (!this.main.paused) this.play()
-    else this.unlock()
   }
 
   private turnOff(): void {
@@ -232,17 +236,35 @@ export class Reference {
   private load(): void {
     const reference = this.track?.reference
     if (!reference) return
-    this.audio.src = reference.url
-    this.audio.load()
-    this.applyGain()
+    const token = ++this.loadToken
+    this.setStatus('loading')
+    this.resolve(reference.url).then(
+      (src) => {
+        if (token !== this.loadToken || !this.enabled) return
+        this.audio.src = src
+        this.audio.load()
+        this.applyGain()
+        this.setStatus('on')
+        if (!this.main.paused) {
+          this.jump()
+          this.play()
+        }
+      },
+      () => {
+        if (token === this.loadToken) this.setStatus('error')
+      },
+    )
   }
 
   private unload(): void {
+    this.loadToken += 1
     this.stopNudging()
     this.drift = null
     this.audio.pause()
+    const old = this.audio.getAttribute('src')
     this.audio.removeAttribute('src')
     this.audio.load()
+    if (old?.startsWith('blob:')) URL.revokeObjectURL(old)
     if (this.enabled) this.setStatus('on')
   }
 
