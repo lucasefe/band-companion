@@ -1,0 +1,55 @@
+{
+  "backline": "0.1.0",
+  "hash": "ab2dfb0c",
+  "song": {
+    "artist": "Divinyls",
+    "title": "I Touch Myself"
+  },
+  "source": {
+    "kind": "url",
+    "url": "https://www.youtube.com/watch?v=wv-34w8kGPM",
+    "file": "source.webm",
+    "meta": {
+      "id": "wv-34w8kGPM",
+      "title": "Divinyls - I Touch Myself (Official Music Video)",
+      "track": null,
+      "artist": null,
+      "album": null,
+      "channel": "DivinylsVEVO",
+      "uploader": "DivinylsVEVO",
+      "duration": 220,
+      "webpage_url": "https://www.youtube.com/watch?v=wv-34w8kGPM",
+      "upload_date": "20090305"
+    }
+  },
+  "job": "/Users/lucasefe/Music/Backline/jobs/Divinyls - I Touch Myself (ab2dfb0c)",
+  "project": "I Touch Myself.RPP",
+  "files": {
+    "lyrics": "I Touch Myself.lrc",
+    "drums": "I Touch Myself.wav"
+  },
+  "timeline": {
+    "count_in_bars": 2,
+    "count_in_seconds": 4.320043,
+    "song_starts_at": 3.282443,
+    "bpm": 111.11,
+    "meter": 4
+  },
+  "grid": {
+    "mode": "tracked",
+    "bpm": 111.11,
+    "confident_beats": 401,
+    "residual_p95_ms": 56.5,
+    "residual_max_ms": 99.1,
+    "dropped": 0,
+    "inserted": 0,
+    "reason": "straight fit too loose (p95 56 ms, max 99 ms)"
+  },
+  "lyrics": {
+    "source": "lrclib:34463062",
+    "lines": 80,
+    "offset": 0.0,
+    "on_vocal": 0.93
+  },
+  "updated": "2026-10-26T13:35:44"
+}

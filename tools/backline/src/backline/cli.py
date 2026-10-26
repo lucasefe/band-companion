@@ -167,13 +167,49 @@ def resimplify(
 
 @app.command()
 def export(
-    job_dir: Path = typer.Argument(..., help="An existing job folder."),
+    job_dir: Path | None = typer.Argument(
+        None, help="A job folder; without one, every song under tracks/ with a job."
+    ),
 ) -> None:
     """Update the song folder from the project as saved in Reaper: every marker becomes a
-    line of the .lrc. Run it after editing lyrics (and rendering) in Reaper."""
+    line of the .lrc, and the newest render becomes <Title>.wav. Run it after editing in
+    Reaper; `mise run sync-audio` runs it for every song first."""
     from backline.pipeline import export as export_pipeline
+    from backline.pipeline import export_all
 
-    _execute(lambda reporter: export_pipeline(job_dir.expanduser(), reporter))
+    if job_dir is not None:
+        _execute(lambda reporter: export_pipeline(job_dir.expanduser(), reporter))
+        return
+    results = export_all()
+    if not results:
+        console.print("[dim]no song folders with a job under tracks/[/]")
+        return
+    table = Table(show_header=False, box=None, pad_edge=False)
+    table.add_column(style="bold")
+    table.add_column(overflow="fold")
+    failed = 0
+    for folder, result in results:
+        if isinstance(result, Exception):
+            failed += 1
+            table.add_row(escape(folder.name), f"[red]{escape(str(result))}[/]")
+            continue
+        render = result.outputs["render"]
+        if not render.exists():
+            state = "[yellow]not rendered[/]"
+        elif render.stat().st_mtime < result.project_path.stat().st_mtime:
+            state = "[yellow]render older than the project[/]"
+        else:
+            state = "rendered"
+        lines = f"{result.lyric_lines} lines" if result.lyric_lines else "[yellow]no lyrics[/]"
+        tidy = (
+            f"  [dim](kept the newest render; removed {', '.join(result.renders_removed)})[/]"
+            if result.renders_removed
+            else ""
+        )
+        table.add_row(escape(folder.name), f"{lines} · {state}{tidy}")
+    console.print(table)
+    if failed:
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -205,15 +241,22 @@ def lyrics_cmd(
     lyrics_offset: float | None = typer.Option(
         None, "--offset", help="Shift lyrics by this many seconds (skips the vocal-stem check)."
     ),
+    replace: bool = typer.Option(
+        False,
+        help="Swap the markers of a project Reaper has saved for the lines found "
+        "(your lyric edits in Reaper are lost). Close the project in Reaper first.",
+    ),
 ) -> None:
-    """Look the lyrics up again (with hints) and put them into the project as markers; a
-    project saved by Reaper keeps everything else. Close it in Reaper first."""
+    """Look the lyrics up again (with hints). A project that is still ours is regenerated with
+    the result; one Reaper has saved keeps its markers unless --replace. To update the .lrc
+    from the markers you edited in Reaper, use `backline export`."""
     from backline.pipeline import redo_lyrics
 
-    _execute(
+    result = _execute(
         lambda reporter: redo_lyrics(
             job_dir.expanduser(),
             reporter,
+            replace=replace,
             lyrics=True,
             artist=artist,
             title=title,
@@ -221,6 +264,15 @@ def lyrics_cmd(
             lyrics_offset=lyrics_offset,
         )
     )
+    if result.project_kept and not result.lyrics_replaced:
+        found = len(result.lyrics.get("lines_song_time", []))
+        if found:
+            console.print(
+                f"[yellow]The project was saved by Reaper, so its {result.lyric_lines} markers "
+                f"were kept; the lookup found {found} lines.[/] Run again with [bold]--replace[/] "
+                "to swap them in (close the project in Reaper first), or edit the markers in "
+                "Reaper and `backline export`."
+            )
 
 
 @app.command(name="fx-template")
@@ -263,7 +315,7 @@ def fx_template(
     )
 
 
-def _execute(fn) -> None:
+def _execute(fn):
     reporter = RichReporter()
     try:
         with reporter:
@@ -275,6 +327,7 @@ def _execute(fn) -> None:
         console.print(f"[red]error:[/] {escape(str(e))}")
         raise typer.Exit(code=1) from None
     _print_summary(result)
+    return result
 
 
 class RichReporter:
@@ -361,6 +414,12 @@ def _print_summary(result) -> None:
     else:
         table.add_row("  written", "[yellow]no .lrc: the project has no markers[/]")
     render = result.outputs["render"]
+    if result.renders_removed:
+        table.add_row(
+            "  renders",
+            f"kept the newest as {escape(render.name)}; removed "
+            + escape(", ".join(result.renders_removed)),
+        )
     if not render.exists():
         table.add_row("  to render", escape(render.name))
     elif render.stat().st_mtime < result.project_path.stat().st_mtime:

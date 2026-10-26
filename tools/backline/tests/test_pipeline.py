@@ -5,7 +5,7 @@ import pytest
 
 from backline import job as J
 from backline.config import Config
-from backline.pipeline import RunOptions, export, redo_lyrics, resimplify, run
+from backline.pipeline import RunOptions, export, export_all, redo_lyrics, resimplify, run
 from backline.reaper import HEADER, read_markers
 
 SAVED_BY_REAPER = '<REAPER_PROJECT 0.1 "7.82/macOS-arm64" 1792499948 0'
@@ -115,39 +115,87 @@ def test_the_saved_project_is_the_source(loop_wav: Path, tmp_path: Path):
     lrc_text = result.outputs["lrc"].read_text()
     assert "[re:backline]" in lrc_text and "]first line\n" in lrc_text
 
-    # The user edits in Reaper: a line moved, one reworded, one added; Reaper saves its way.
+    # The user edits in Reaper: a line moved, one reworded, one added (bare name, flags 8, as
+    # Reaper writes a marker inserted by hand); Reaper saves its way, with CRLF.
     saved = project.read_text().replace(HEADER, SAVED_BY_REAPER)
     saved = saved.replace('"first line" 0', '"first line, fixed" 0 0 1 B {GUID-1} 0 2')
     saved = saved.replace(f'  MARKER 10 {shift + 2:.10g} "second line" 0\n', "")
-    saved = saved.replace("  <TRACK", f'  MARKER 10 {shift + 2.75:.10g} "later" 0\n  <TRACK', 1)
-    project.write_text(saved)
-    (result.output_dir / "loop.wav").write_bytes(b"RIFF-fake-render")
+    saved = saved.replace(
+        "  <TRACK", f"  MARKER 10 {shift + 2.75:.10g} (later) 8 0 1 B {{G}} 0 2\n  <TRACK", 1
+    )
+    saved = saved.replace("\n", "\r\n")
+    project.write_bytes(saved.encode())
+    render = result.output_dir / "loop.wav"
+    render.write_bytes(b"RIFF-fake-render")
 
     ex = export(job.dir, config=cfg)
     assert set(ex.timings) == {"output"} and ex.project_kept and ex.lyric_lines == 10
-    assert project.read_text() == saved, "export never writes the project"
+    assert project.read_bytes() == saved.encode(), "export never writes the project"
     lrc_text = ex.outputs["lrc"].read_text()
     assert "]first line, fixed\n" in lrc_text and "second line" not in lrc_text
-    assert lrc_text.rstrip().endswith("]later")
+    assert lrc_text.rstrip().endswith("](later)")
     record = json.loads((ex.output_dir / "backline.json").read_text())
     assert record["lyrics"] == {"source": "project", "lines": 10}
     assert record["files"]["lyrics"] == "loop.lrc"
 
-    # A new lookup replaces the markers but nothing else; a miss leaves them alone.
+    # A new lookup never touches a saved project's markers unless told to.
     other = tmp_path / "other.lrc"
     other.write_text("[00:01.00]from the new lookup\n")
-    re = redo_lyrics(job.dir, config=cfg, lyrics_file=other)
-    assert re.project_kept and re.lyric_lines == 9
+    kept = redo_lyrics(job.dir, config=cfg, lyrics_file=other)
+    assert kept.project_kept and not kept.lyrics_replaced and kept.lyric_lines == 10
+    assert project.read_bytes() == saved.encode()
+    assert len(kept.lyrics["lines_song_time"]) == 1, "the lookup itself ran"
+    re = redo_lyrics(job.dir, config=cfg, replace=True, lyrics_file=other)
+    assert re.project_kept and re.lyrics_replaced and re.lyric_lines == 9
     text = project.read_text()
     assert text.startswith(SAVED_BY_REAPER) and "{GUID-1}" not in text and "later" not in text
     assert (pytest.approx(shift + 1.0, abs=0.02), "from the new lookup") in read_markers(text)
-    miss = redo_lyrics(job.dir, config=cfg, lyrics=False)
+    assert "\r\n" in project.read_bytes().decode() and "<TRACK {" in text, "CRLF and tracks kept"
+    miss = redo_lyrics(job.dir, config=cfg, replace=True, lyrics=False)
     assert miss.project_kept and miss.lyric_lines == 9 and project.read_text() == text
+
+    # Reaper's "silently increment" renders: the newest becomes <stem>.wav, the rest go.
+    old = render.read_bytes()
+    render.write_bytes(b"RIFF-old")
+    (result.output_dir / "loop-001.wav").write_bytes(b"RIFF-middle")
+    newest = result.output_dir / "loop-002.wav"
+    newest.write_bytes(b"RIFF-newest")
+    import os
+    import time
+
+    os.utime(render, (time.time() - 30, time.time() - 30))
+    os.utime(result.output_dir / "loop-001.wav", (time.time() - 20, time.time() - 20))
+    (result.output_dir / "loop (daring).wav").write_bytes(b"not a render increment")
+    tidy = export(job.dir, config=cfg)
+    assert tidy.renders_removed == ["loop-001.wav", "loop.wav"], "sorted; newest kept"
+    assert render.read_bytes() == b"RIFF-newest" and not newest.exists()
+    assert (result.output_dir / "loop (daring).wav").exists(), "only -NNN siblings are touched"
+    del old
 
     # resimplify keeps a saved project (MIDI still regenerated) unless told to overwrite.
     kept = resimplify(job.dir, config=cfg, count_in=1)
     assert kept.project_kept and project.read_text() == text
     assert kept.outputs["midi"].exists()
+
+    # export_all walks tracks/ through backline.json; folders without a job are skipped.
+    tracks = tmp_path / "tracks"
+    folder = tracks / "Gig" / "01 - loop"
+    folder.mkdir(parents=True)
+    moved = resimplify(job.dir, config=cfg, deliver_to=folder)
+    assert moved.output_dir == folder and (folder / "backline.json").exists()
+    (tracks / "Gig" / "02 - Hand made").mkdir()
+    (tracks / "Gig" / "02 - Hand made" / "backline.json").write_text('{"job": "/nowhere"}')
+    cfg_tracks = Config(
+        path=None,
+        jobs=cfg.jobs,
+        tracks=tracks,
+        default_set="Gig",
+        count_in_bars=2,
+        count_in_note=37,
+    )
+    everything = export_all(cfg_tracks)
+    assert [f.name for f, _ in everything] == ["01 - loop"]
+    assert everything[0][1].lyric_lines == 9
     fresh = resimplify(job.dir, config=cfg, overwrite=True, lyrics=True, lyrics_file=lrc)
     assert not fresh.project_kept and project.read_text().startswith(HEADER)
     assert fresh.lyric_lines == 4 + 2, "one bar of countdown now"

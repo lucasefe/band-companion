@@ -136,7 +136,8 @@ def replace_markers(rpp_text: str, markers: list[tuple[float, str]]) -> str:
             (i for i, ln in enumerate(kept) if ln.startswith("  <TRACK")), len(kept) - 1
         )
     kept[insert_at:insert_at] = marker_lines(markers)
-    return "\n".join(kept) + "\n"
+    eol = "\r\n" if "\r\n" in rpp_text else "\n"  # Reaper saves with CRLF
+    return eol.join(kept) + eol
 
 
 def _unquote(token: str) -> str:

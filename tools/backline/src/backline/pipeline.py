@@ -71,7 +71,9 @@ class RunResult:
     outputs: dict[str, Path]  # lrc / midi / render target
     fx_chain: bool
     project_kept: bool = False  # Reaper owns the project; it was read, not written
+    lyrics_replaced: bool = False  # the lookup's lines were put into a Reaper-saved project
     lyric_lines: int = 0  # markers exported to the .lrc
+    renders_removed: list[str] = field(default_factory=list)  # Reaper's -001 copies cleaned up
     deduped: bool = False  # the song folder already existed for this source
     timings: dict[str, float] = field(default_factory=dict)
 
@@ -164,14 +166,21 @@ def redo_lyrics(
     job_dir: Path,
     reporter: Reporter | None = None,
     config: Config | None = None,
+    replace: bool = False,
     **overrides: Any,
 ) -> RunResult:
-    """Look the lyrics up again with the saved options plus overrides and put them into the
-    project: regenerated when it is still ours, markers swapped in place once Reaper owns it."""
+    """Look the lyrics up again with the saved options plus overrides. A project that is still
+    ours is regenerated with the result; one Reaper has saved keeps its markers — they may be
+    the user's edits — unless `replace` says to swap them."""
     job = Job.open(job_dir)
     opts = options_from_job(job, **overrides)
     return _Runner(
-        job, opts, reporter or NullReporter(), rerun={"lyrics"}, replace_lyrics=True, config=config
+        job,
+        opts,
+        reporter or NullReporter(),
+        rerun={"lyrics"},
+        replace_lyrics=replace,
+        config=config,
     ).process()
 
 
@@ -184,6 +193,30 @@ def export(
     job = Job.open(job_dir)
     opts = options_from_job(job)
     return _Runner(job, opts, reporter or NullReporter(), rerun={"output"}, config=config).process()
+
+
+def export_all(
+    config: Config | None = None, reporter: Reporter | None = None
+) -> list[tuple[Path, RunResult | Exception]]:
+    """export() for every song folder under the configured tracks/ whose backline.json points
+    at a job that still exists. Folders without a job (hand-made) are skipped."""
+    from backline.catalog import RECORD_NAME, read_record
+
+    cfg = config or load_config()
+    results: list[tuple[Path, RunResult | Exception]] = []
+    if not cfg.tracks:
+        return results
+    for record_path in sorted(cfg.tracks.glob(f"*/*/{RECORD_NAME}")):
+        folder = record_path.parent
+        record = read_record(folder) or {}
+        job_dir = Path(record.get("job", "")).expanduser() if record.get("job") else None
+        if not job_dir or not job_dir.is_dir():
+            continue
+        try:
+            results.append((folder, export(job_dir, reporter, cfg)))
+        except Exception as e:  # noqa: BLE001 — one broken song must not stop the others
+            results.append((folder, e))
+    return results
 
 
 def rename(
@@ -259,6 +292,28 @@ def options_from_job(job: Job, **overrides: Any) -> RunOptions:
             kwargs[key] = Path(kwargs[key])
     kwargs["force"] = bool(overrides.get("force", False))
     return RunOptions(**kwargs)
+
+
+def _tidy_renders(render: Path) -> list[str]:
+    """Reaper renders to `<stem>-001.wav` when `<stem>.wav` exists (the "silently increment"
+    option). The newest render is the one meant: it becomes `<stem>.wav`, older copies go."""
+    stem = re.escape(render.stem)
+    candidates = [
+        p
+        for p in render.parent.glob(f"{render.stem}*.wav")
+        if re.fullmatch(rf"{stem}(-\d{{3}})?\.wav", p.name)
+    ]
+    if len(candidates) < 2:
+        return []
+    newest = max(candidates, key=lambda p: p.stat().st_mtime)
+    removed = []
+    for p in sorted(candidates):
+        if p != newest:
+            p.unlink()
+            removed.append(p.name)
+    if newest != render:
+        newest.rename(render)
+    return removed
 
 
 def _write_source_json(job: Job, payload: dict[str, Any]) -> None:
@@ -537,12 +592,14 @@ class _Runner:
                     render=RenderSettings(directory=str(out_dir), pattern=stem),
                 )
             elif self.replace_lyrics and initial_markers:  # a miss keeps what is there
-                rpp_path.write_text(
-                    replace_markers(rpp_path.read_text(encoding="utf-8"), initial_markers),
-                    encoding="utf-8",
-                )
+                # newline="" keeps Reaper's CRLF; Path.read_text() would normalise it away.
+                with rpp_path.open(encoding="utf-8", newline="") as f:
+                    text = f.read()
+                with rpp_path.open("w", encoding="utf-8", newline="") as f:
+                    f.write(replace_markers(text, initial_markers))
             markers = read_markers(rpp_path.read_text(encoding="utf-8"))
             self._write_lrc(outputs["lrc"], markers, lyrics_info, layout.shift + duration)
+            removed = _tidy_renders(outputs["render"])
             write_record(
                 out_dir,
                 self._song_record(outputs, rpp_path, layout, lyrics_info, grid_info, markers, kept),
@@ -552,6 +609,8 @@ class _Runner:
                 "count_in_seconds": layout.count_in_seconds,
                 "project": rpp_path.name,
                 "project_kept": kept,
+                "lyrics_replaced": bool(kept and self.replace_lyrics and initial_markers),
+                "renders_removed": removed,
                 "lyric_lines": len(markers),
                 "output_dir": str(out_dir),
                 "fx_chain": fx_chain is not None,
@@ -580,7 +639,9 @@ class _Runner:
             outputs=outputs,
             fx_chain=bool(info.get("fx_chain")),
             project_kept=bool(info.get("project_kept")),
+            lyrics_replaced=bool(info.get("lyrics_replaced")),
             lyric_lines=int(info.get("lyric_lines", 0)),
+            renders_removed=list(info.get("renders_removed", [])),
             deduped=self.deduped is not None,
             timings=self.timings,
         )

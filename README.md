@@ -13,9 +13,7 @@ Everything a band needs behind it. Two halves in one repo:
 ```bash
 backline add "https://www.youtube.com/watch?v=flr8vDQ9Wuc"
 # open the Reaper project it prints: edit, save, File → Render
-backline export "~/Music/Backline/jobs/Juanes - Fotografia (4b74e33d)"
-mise run sync-audio
-mise run deploy
+mise run deploy          # = backline export (every song) + sync-audio + build + deploy
 ```
 
 Each song folder holds two files on **one timeline** — two bars of count-in, then the song:
@@ -61,10 +59,11 @@ backline add <audio-file | URL> [--set "Cumple de Guille"] [--number 3]
 3. **Reaper.** Open the project, fix what needs fixing — drum hits, and the lyrics: drag a
    marker to re-time a line, double-click it to change the words, add or delete markers —
    save, File → Render. The dialog is pre-filled to put `Title.wav` in the song folder.
-4. `backline export <job>` reads the markers back from the saved project and rewrites
-   `Title.lrc`. Run it whenever you touched the lyrics.
-5. `mise run sync-audio` uploads the WAV to R2 and updates `tracks/audio.json`;
-   `mise run deploy` publishes.
+4. `mise run deploy` publishes. It starts with `backline export`, which reads every song's
+   markers back from its saved project into `Title.lrc` and keeps the newest render as
+   `Title.wav` (Reaper writes `Title-001.wav` when the file exists; older copies are removed),
+   then uploads the WAVs to R2 and updates `tracks/audio.json`. `backline export <job>` does
+   one song, with a report.
 
 ### Options
 
@@ -82,9 +81,9 @@ backline add <audio-file | URL> [--set "Cumple de Guille"] [--number 3]
 --quality fast|best   Demucs htdemucs (default) or htdemucs_ft (~4× slower)
 --force               ignore the cache and rerun every stage
 
-backline export <job>                         song folder from the saved project (markers → .lrc)
+backline export [<job>]                       song folder(s) from the saved project(s): markers → .lrc, newest render → .wav
 backline resimplify <job> [--count-in 0 … --overwrite]   regenerate MIDI (and the project, if it is still ours) from the cached analysis
-backline lyrics <job> [--artist … --title … --offset …]   look the lyrics up again and swap the project's markers
+backline lyrics <job> [--artist … --title … --offset … --replace]   look the lyrics up again; --replace puts them into a saved project
 backline rename <job> --title … [--artist …]  fix the name everywhere: job, project, song folder, files (render included)
 backline fx-template <Title.RPP>              remember your drum VSTi
 backline doctor
@@ -95,9 +94,11 @@ Inputs: wav, mp3, m4a, aac, flac, aiff, ogg, opus, or any URL `yt-dlp` understan
 Got the name wrong? `backline rename <job> --title "Ironic"` renames the job, the project, the
 song folder (keeping its number) and every file in it — the rendered `.wav` included — and
 regenerates the outputs, so nothing needs re-rendering. Lyrics not found or wrong?
-`backline lyrics <job> --artist … --title …` redoes the lookup and swaps the markers in the
-project (close it in Reaper first; nothing else in it is touched); `--offset -0.3` shifts
-them by hand. A lookup that finds nothing leaves the markers alone.
+`backline lyrics <job> --artist … --title …` redoes the lookup; `--offset -0.3` shifts them by
+hand. While the project is still untouched it is regenerated with the result. Once Reaper has
+saved it, the markers in it are yours: the command shows what it found and leaves them alone
+unless you add `--replace` (close the project in Reaper first; nothing else in it is touched).
+To get *your* marker edits into the `.lrc`, that's `backline export`, not `lyrics`.
 
 ### The job folder
 
@@ -115,9 +116,11 @@ Every stage is cached there, so re-running is instant and `resimplify`/`lyrics` 
 what changed.
 
 **One project per song, and once Reaper has saved it, it is the source.** `backline` then
-reads it (`export`) or swaps its lyric markers (`lyrics`), but never regenerates it on its
-own: `resimplify` still writes fresh MIDI to `output/` for you to import, and only
-`--overwrite` replaces the project — with your edits.
+reads it (`export`) or, only when told to (`lyrics --replace`), swaps its lyric markers, but
+never regenerates it on its own: `resimplify` still writes fresh MIDI to `output/` for you to
+import, and only `--overwrite` replaces the project — with your edits. Reaper keeps
+timestamped copies of every save in the job's `Backups/`, which is where to look if something
+does go wrong.
 
 ### The Reaper project
 
@@ -136,7 +139,8 @@ countdown (`1 2 3 4 · 1 2 3 4`), then the lines LRCLIB knew — on the project 
 the `.lrc` timeline. Drag one to re-time a line, double-click to edit the words, insert one
 (`M` at the play cursor) for a line that is missing, delete one that is wrong; the
 Region/Marker Manager lists them all. `backline export` turns every plain marker into a line of
-`Title.lrc`, in time order; regions are ignored, so you can still use those for sections.
+`Title.lrc`, in time order; regions are ignored, so you can still use those for sections. A
+marker like `(INTRO)` at the start of the song is a fine way to give the band a cue line.
 
 ### The beat grid
 

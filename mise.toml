@@ -34,12 +34,18 @@ run = "npm run build"
 [tasks.preview]
 run = "npm run preview"
 
+[tasks.export]
+description = "Every song's .lrc from its Reaper project's markers; newest render wins"
+run = "uv run backline export"
+
 [tasks."sync-audio"]
+depends = ["export"]
 description = "Hash tracks/**/*.wav, upload missing ones to R2, rewrite tracks/audio.json"
 run = "npm run sync-audio"
 
 [tasks.deploy]
-description = "sync-audio + build + wrangler deploy"
+description = "export + sync-audio + build + wrangler deploy"
+depends = ["export"]
 run = "npm run deploy"
 
 [tasks."check:browser"]

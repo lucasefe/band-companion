@@ -29,7 +29,7 @@ The venv is activated on `cd`; `backline` is on PATH. `UV_PROJECT` points uv at 
 - `mise run deploy` — sync audio + build + `wrangler deploy`. Needs `wrangler login`.
 - `mise run check:browser` (`node scripts/browser-check.mjs [url]`) — headless Chrome run-through (leader, lyrics, second song, followers, takeover, offline, tablet) against a running preview. Run it after UI or sync changes. It derives its lyric/title expectations from the first song folder in `tracks/`, so it follows the set list; it needs the local R2 filled (`mise run sync-audio -- --local`). After tapping a song, wait for `.now-title` to change (not for something that may already be visible from the previous song) — songs download before they load.
 - `mise run test` / `mise run test:slow` / `mise run lint` / `mise run fmt` — the importer (pytest, ruff).
-- `backline add <file|url> [--set .. --number ..]`, `backline export <job>` (saved project → `.lrc` + `backline.json`; warns when the render is older than the project), `backline resimplify <job>` (reuses the job's saved options — pass `--count-in`/`--grid`/`--bpm` explicitly to change an existing job; config defaults only apply to new ones; a Reaper-saved project is kept and only the MIDI in `output/` is refreshed unless `--overwrite`), `backline lyrics <job>` (new lookup → markers swapped in place in a Reaper-saved project; a miss leaves them), `backline rename <job> --title/--artist` (job dir, project, song folder + files incl. the render, then reruns output), `backline fx-template <RPP>`, `backline doctor`.
+- `backline add <file|url> [--set .. --number ..]`, `backline export [<job>]` (saved project → `.lrc` + `backline.json`, newest `<Title>[-NNN].wav` kept as `<Title>.wav` and the rest removed; warns when the render is older than the project; without a job: every song folder under `tracks/` whose `backline.json` `job` exists — `mise run sync-audio`/`deploy` depend on it), `backline resimplify <job>` (reuses the job's saved options — pass `--count-in`/`--grid`/`--bpm` explicitly to change an existing job; config defaults only apply to new ones; a Reaper-saved project is kept and only the MIDI in `output/` is refreshed unless `--overwrite`), `backline lyrics <job>` (new lookup; a Reaper-saved project keeps its markers unless `--replace`, and a miss always leaves them), `backline rename <job> --title/--artist` (job dir, project, song folder + files incl. the render, then reruns output), `backline fx-template <RPP>`, `backline doctor`.
 
 The reference material: `https://www.youtube.com/watch?v=flr8vDQ9Wuc` (Juanes – Fotografía; music
 video 244 s vs 241 s album cut → lyrics offset +0.80 s is expected), job
@@ -132,13 +132,20 @@ Rules:
   `GRID_VERSION` in the tempo stage params must be bumped when `choose_grid()` changes (the stage
   is cached on it).
 - **The project is the source once Reaper has saved it** (`is_generated()` header check). The
-  output stage then keeps it (`RunResult.project_kept`) and only `backline lyrics`
+  output stage then keeps it (`RunResult.project_kept`) and only `backline lyrics --replace`
   (`_Runner(replace_lyrics=True)`) touches it, swapping the plain markers; `--overwrite`
-  regenerates it wholesale. The `.lrc` is **always** `read_markers()` of whatever project is
-  there (countdown markers included; a project without lyric markers → no `.lrc`), so there is
-  one code path for `add`, `resimplify`, `lyrics`, `rename` and `export` (= a rerun of the output
-  stage). The `.lrc` is not a cached artifact (it is conditional). Reaper does not notice
-  external edits: `backline lyrics` must run with the project closed.
+  regenerates it wholesale. **Default must be non-destructive**: the first `backline lyrics`
+  swapped markers by default and wiped a user's hand-added `(INTRO)` marker within an hour of
+  shipping (recovered from Reaper's `Backups/`). The `.lrc` is **always** `read_markers()` of
+  whatever project is there (countdown markers included; a project without lyric markers → no
+  `.lrc`), so there is one code path for `add`, `resimplify`, `lyrics`, `rename` and `export`
+  (= a rerun of the output stage). The `.lrc` is not a cached artifact (it is conditional).
+  Reaper does not notice external edits: `backline lyrics --replace` must run with the project
+  closed. Reaper saves RPPs with **CRLF** and writes hand-inserted markers as bare names with
+  flags `8` (`MARKER 55 5.647 (INTRO) 8 0 1 B {GUID} 0 2`): read/write the project with
+  `newline=""` (`Path.read_text()` normalises CRLF away) and treat any `flags & 1 == 0` as a
+  marker. `_tidy_renders()` runs in the output stage: of `<stem>.wav` + `<stem>-NNN.wav` the
+  newest by mtime wins and is renamed to `<stem>.wav`.
 - **Song time vs output time.** `notes.json`, `beats.json`, `lyrics.json` are in song time; the
   output stage adds `Layout.shift`. The count-in ends exactly on the first downbeat.
 - **Lyrics never fail the run**: a miss is written to `lyrics.json` (`found: false`) and cached.

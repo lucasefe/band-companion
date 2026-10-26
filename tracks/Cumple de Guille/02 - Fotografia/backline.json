@@ -1,0 +1,53 @@
+{
+  "backline": "0.1.0",
+  "hash": "4b74e33d",
+  "song": {
+    "artist": "Juanes",
+    "title": "Fotografia"
+  },
+  "source": {
+    "kind": "url",
+    "url": "https://www.youtube.com/watch?v=flr8vDQ9Wuc",
+    "file": "source.webm",
+    "meta": {
+      "id": "flr8vDQ9Wuc",
+      "title": "Juanes - Fotografia ft. Nelly Furtado",
+      "track": null,
+      "artist": null,
+      "album": null,
+      "channel": "Juanes",
+      "uploader": "Juanes",
+      "duration": 244,
+      "webpage_url": "https://www.youtube.com/watch?v=flr8vDQ9Wuc",
+      "upload_date": "20091005"
+    }
+  },
+  "job": "/Users/lucasefe/Music/Backline/jobs/Juanes - Fotografia (4b74e33d)",
+  "project": "Fotografia.RPP",
+  "files": {
+    "lyrics": "Fotografia.lrc",
+    "drums": "Fotografia.wav"
+  },
+  "timeline": {
+    "count_in_bars": 2,
+    "count_in_seconds": 5.647059,
+    "song_starts_at": 4.565659,
+    "bpm": 85.0,
+    "meter": 4
+  },
+  "grid": {
+    "mode": "straight",
+    "bpm": 85.0,
+    "confident_beats": 290,
+    "residual_p95_ms": 11.5,
+    "residual_max_ms": 17.5,
+    "dropped": 0,
+    "inserted": 0,
+    "reason": null
+  },
+  "lyrics": {
+    "source": "project",
+    "lines": 55
+  },
+  "updated": "2026-10-26T13:35:44"
+}
