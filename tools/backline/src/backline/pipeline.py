@@ -788,8 +788,10 @@ class _Runner:
                     "suggested": est.suggested,
                     "agreement_at_zero": est.agreement_at_zero,
                     "agreement_at_applied": est.agreement_at_applied,
-                    "source": "vocal stem",
+                    "source": "vocal stem (another edit)" if est.gross else "vocal stem",
                 }
+                if est.gross:
+                    payload["offset"]["gross"] = est.gross
 
         job.path(J.LYRICS_TXT).write_text(plain_text(lyrics), encoding="utf-8")
         payload.update(

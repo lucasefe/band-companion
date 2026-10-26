@@ -1,0 +1,53 @@
+{
+  "backline": "0.1.0",
+  "hash": "3c96e97f",
+  "song": {
+    "artist": "Roxette",
+    "title": "The Look"
+  },
+  "source": {
+    "kind": "url",
+    "url": "https://www.youtube.com/watch?v=LlVI7ZNiFlI",
+    "file": "source.webm",
+    "meta": {
+      "id": "LlVI7ZNiFlI",
+      "title": "Roxette - The Look",
+      "track": null,
+      "artist": null,
+      "album": null,
+      "channel": "Roxette",
+      "uploader": "Roxette",
+      "duration": 232,
+      "webpage_url": "https://www.youtube.com/watch?v=LlVI7ZNiFlI",
+      "upload_date": "20090304"
+    }
+  },
+  "job": "/Users/lucasefe/Music/Backline/jobs/Roxette - The Look (3c96e97f)",
+  "project": "The Look.RPP",
+  "files": {
+    "lyrics": "The Look.lrc",
+    "drums": "The Look.wav"
+  },
+  "timeline": {
+    "count_in_bars": 2,
+    "count_in_seconds": 5.058489,
+    "song_starts_at": 3.373089,
+    "bpm": 94.89,
+    "meter": 4
+  },
+  "grid": {
+    "mode": "straight",
+    "bpm": 94.89,
+    "confident_beats": 355,
+    "residual_p95_ms": 15.0,
+    "residual_max_ms": 25.4,
+    "dropped": 0,
+    "inserted": 0,
+    "reason": null
+  },
+  "lyrics": {
+    "source": "project",
+    "lines": 97
+  },
+  "updated": "2026-10-26T15:29:13"
+}

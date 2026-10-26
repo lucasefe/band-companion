@@ -46,10 +46,8 @@
     "reason": "straight fit too loose (p95 56 ms, max 99 ms)"
   },
   "lyrics": {
-    "source": "lrclib:34463062",
-    "lines": 80,
-    "offset": 0.0,
-    "on_vocal": 0.93
+    "source": "project",
+    "lines": 80
   },
-  "updated": "2026-10-26T13:35:44"
+  "updated": "2026-10-26T15:22:28"
 }

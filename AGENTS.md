@@ -150,7 +150,13 @@ Rules:
   output stage adds `Layout.shift`. The count-in ends exactly on the first downbeat.
 - **Lyrics never fail the run**: a miss is written to `lyrics.json` (`found: false`) and cached.
   Offsets ≥ 0.5 s against the vocal stem are applied; smaller ones only reported (LRC lines
-  are tagged a touch early by convention).
+  are tagged a touch early by convention). `estimate_offset()` is two-stage: the fine ±6 s
+  onset-contrast search, plus `_gross_shift()` over ±60 s on the sung/silent *pattern*
+  (line live until the next one, ≤ 6 s, vs activity > 0.35) — only when it beats the best
+  pattern score inside ±6 s by ≥ 0.08 does it move the fine window, which then picks by
+  agreement first and contrast second (a chorus every 8 bars gives several shifts with good
+  onsets, one with every line sung). Onset contrast alone picked −50.7 s for *The Look* where
+  −23.3 s is right; the 33 s instrumental break is what decides it.
 - The FX template `~/.config/backline/midi-track.RfxChain` is injected on both MIDI tracks with
   fresh `FXID`s; it is personal and lives outside the repo.
 - Heavy imports (torch, demucs, beat_this) stay inside functions.

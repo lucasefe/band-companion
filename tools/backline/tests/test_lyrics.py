@@ -179,6 +179,24 @@ def test_estimate_offset_ignores_small_shifts_but_catches_gross_ones():
     assert none.applied == 0.0
 
 
+def test_estimate_offset_finds_lyrics_synced_to_another_edit():
+    # A song with a long instrumental break and a chorus that repeats every 8 s: the chorus
+    # alone fits at several shifts, the break only at the true one.
+    verse = [10.0, 13.0, 16.0, 19.0]
+    chorus = [24.0, 28.0, 32.0, 36.0]
+    phrases = verse + chorus + [t + 50 for t in chorus] + [t + 70 for t in verse + chorus]
+    act = _activity_with_phrases(phrases, length=140.0)
+    lines = Lyrics([Line(t + 23.3, "la") for t in phrases], "x", True)  # LRCLIB: 23.3 s late
+    est = estimate_offset(lines, act)
+    assert est.applied == pytest.approx(-23.3, abs=0.05)
+    assert est.gross and est.gross["pattern_match"] > est.gross["pattern_match_near_zero"]
+    assert est.agreement_at_applied == 1.0
+
+    # The same song with lines merely 2.3 s off stays in the fine window: no gross verdict.
+    near = estimate_offset(Lyrics([Line(t + 2.3, "la") for t in phrases], "x", True), act)
+    assert near.applied == pytest.approx(-2.3, abs=0.05) and near.gross is None
+
+
 def test_lyrics_from_file_round_trip(tmp_path: Path):
     from backline.lyrics import lyrics_from_file
 

@@ -182,7 +182,11 @@ channel, or the file name, and looked up on LRCLIB (open, no account). Candidate
 name similarity, duration and whether they are time-synced. The result is checked against the
 isolated vocal: a gross mismatch (a music video with a longer intro than the album cut) is
 corrected with a constant shift; small disagreements are left alone because LRC lines are
-conventionally tagged a touch early. `work/lyrics.json` records what was considered and why.
+conventionally tagged a touch early. Lyrics synced to another edit altogether — LRCLIB's
+*The Look* runs 23 s late against the single — are caught by matching the sung/silent
+pattern of the whole song (a repeated chorus can fool line onsets, an instrumental break
+cannot) and shifted the same way; `backline.json` says `vocal stem (another edit)` when that
+happened. `work/lyrics.json` records what was considered and why.
 Studio recordings only — a live or cover version gets the right words at the wrong times.
 
 ### `backline.toml`

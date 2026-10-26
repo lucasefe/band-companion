@@ -211,12 +211,21 @@ def lyrics_from_lrclib(hints: Hints) -> tuple[Lyrics | None, list[dict[str, Any]
 # --- timing check against the vocal stem -----------------------------------------
 
 FRAME_RATE = 100
-MAX_OFFSET = 6.0
+MAX_OFFSET = 6.0  # the fine search: a music video's longer intro, a trimmed start
 # LRC lines are conventionally tagged a little before the word lands, and energy envelopes lag
 # true onsets slightly, so sub-half-second disagreements are normal. Only a gross mismatch
 # (wrong edition, trimmed intro) is corrected automatically.
 APPLY_MIN_SHIFT = 0.5
 APPLY_MIN_GAIN = 0.10
+# The coarse search: lyrics synced to another edit altogether (The Look: LRCLIB's lines are
+# 23 s late for the single). Decided on the sung/silent pattern, which a repetitive chorus
+# cannot fake the way line onsets can; only a clear win over the fine window counts.
+MAX_GROSS_OFFSET = 60.0
+GROSS_STEP = 0.25
+GROSS_MARGIN = 0.08
+GROSS_PLATEAU = 0.03
+LINE_HOLD = 6.0  # a line is "live" until the next one, at most this long
+SUNG = 0.35  # activity above this is singing
 
 
 @dataclass
@@ -225,6 +234,7 @@ class OffsetEstimate:
     applied: float  # 0.0 unless the suggestion is a gross mismatch
     agreement_at_zero: float  # fraction of lines starting on sung audio, unshifted
     agreement_at_applied: float
+    gross: dict[str, float] | None = None  # when the coarse search moved the fine window
 
 
 def vocal_activity(vocals_wav: Path) -> np.ndarray:
@@ -274,12 +284,56 @@ def estimate_offset(lyrics: Lyrics, activity: np.ndarray) -> OffsetEstimate:
     suggested = float(shifts[int(scores.argmax())])
     gain = float(scores.max() - contrast(0.0))
     applied = suggested if abs(suggested) >= APPLY_MIN_SHIFT and gain >= APPLY_MIN_GAIN else 0.0
+
+    gross = _gross_shift(starts, activity)
+    if gross is not None:
+        lo, hi = gross["region"]
+        fine = np.arange(lo, hi + 1e-9, 0.02)
+        agree = np.array([agreement(s) for s in fine])
+        # The best-agreeing shifts, then the sharpest onsets among them: a chorus repeated
+        # every eight bars gives several shifts with good onsets, only one with every line sung.
+        top = np.where(agree >= agree.max() - 0.02)[0]
+        pick = top[int(np.argmax([contrast(fine[i]) for i in top]))]
+        suggested = applied = float(fine[pick])
+        del gross["region"]
+
     return OffsetEstimate(
         suggested=round(suggested, 2),
         applied=round(applied, 2),
         agreement_at_zero=round(agreement(0.0), 3),
         agreement_at_applied=round(agreement(applied), 3),
+        gross=gross,
     )
+
+
+def _gross_shift(starts: np.ndarray, activity: np.ndarray) -> dict[str, Any] | None:
+    """A region of shifts, far outside the fine window, where the lyrics' sung/silent pattern
+    matches the stem's clearly better than anything near zero; None when nothing beats it."""
+    sung = activity > SUNG
+    n = len(activity)
+    order = np.sort(starts)
+    ends = np.minimum(np.append(order[1:], order[-1] + LINE_HOLD), order + LINE_HOLD)
+
+    def pattern(shift: float) -> float:
+        live = np.zeros(n, dtype=bool)
+        a = np.clip(np.round((order + shift) * FRAME_RATE).astype(int), 0, n)
+        b = np.clip(np.round((ends + shift) * FRAME_RATE).astype(int), 0, n)
+        for i, j in zip(a, b, strict=True):
+            live[i:j] = True
+        return float((live == sung).mean())
+
+    shifts = np.arange(-MAX_GROSS_OFFSET, MAX_GROSS_OFFSET + 1e-9, GROSS_STEP)
+    scores = np.array([pattern(s) for s in shifts])
+    near = np.abs(shifts) <= MAX_OFFSET
+    local_best, wide_best = float(scores[near].max()), float(scores.max())
+    if wide_best - local_best < GROSS_MARGIN:
+        return None
+    plateau = shifts[scores >= wide_best - GROSS_PLATEAU]
+    return {
+        "pattern_match": round(wide_best, 3),
+        "pattern_match_near_zero": round(local_best, 3),
+        "region": (float(plateau.min()) - 1.0, float(plateau.max()) + 1.0),
+    }
 
 
 # --- persistence ---------------------------------------------------------------------

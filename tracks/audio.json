@@ -1,8 +1,24 @@
 {
+  "Cumple de Guille/01 - I Touch Myself": {
+    "key": "d9cac61a1f4f6323.wav",
+    "bytes": 59151786,
+    "source": "I Touch Myself.wav",
+    "uploaded": [
+      "remote"
+    ]
+  },
   "Cumple de Guille/02 - Fotografia": {
-    "key": "7e3e2965d0a8c564.wav",
+    "key": "c5e1f2791c09d491.wav",
     "bytes": 65855934,
-    "source": "Fotografia-001.wav",
+    "source": "Fotografia.wav",
+    "uploaded": [
+      "remote"
+    ]
+  },
+  "Cumple de Guille/03 - The Look": {
+    "key": "1da0306a224f2f77.wav",
+    "bytes": 62259480,
+    "source": "The Look.wav",
     "uploaded": [
       "remote"
     ]
