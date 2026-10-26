@@ -9,8 +9,6 @@ export interface Track {
   source: { url: string; label: string } | null
   url: string
   bytes: number
-  // The original song on the same timeline (count-in included); the leader can mix it in.
-  reference: { url: string; bytes: number } | null
   lyrics: Lyrics | null
   setId: string
   setName: string
@@ -27,7 +25,6 @@ export interface TrackSet {
 interface AudioEntry {
   key: string
   bytes: number
-  reference?: { key: string; bytes: number }
 }
 
 const DEFAULT_SET = 'Songs'
@@ -131,7 +128,6 @@ export function loadSets(): TrackSet[] {
       source: sourceOf(record),
       url: `/audio/${entry.key}`,
       bytes: entry.bytes,
-      reference: entry.reference ? { url: `/audio/${entry.reference.key}`, bytes: entry.reference.bytes } : null,
       lyrics: lyrics.get(folder) ?? null,
       setId: setFolder,
       setName: setInfo.name,

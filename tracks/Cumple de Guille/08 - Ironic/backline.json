@@ -23,10 +23,9 @@
     }
   },
   "job": "/Users/lucasefe/Music/Backline/jobs/Alanis Morissette - Ironic (a8c32225)",
-  "project": "Ironic.new.RPP",
+  "project": "Ironic.RPP",
   "files": {
     "lyrics": "Ironic.lrc",
-    "reference": "Ironic.reference.wav",
     "drums": "Ironic.wav"
   },
   "timeline": {
@@ -46,27 +45,9 @@
     "inserted": 0,
     "reason": null
   },
-  "metronome": {
-    "mode": "gaps",
-    "gaps": [
-      {
-        "start": 5.627,
-        "end": 45.02,
-        "bars": 14.0,
-        "bar": 1
-      },
-      {
-        "start": 205.403,
-        "end": 234.244,
-        "bars": 10.25,
-        "bar": 72
-      }
-    ]
-  },
   "lyrics": {
-    "source": "lrclib:37299891",
-    "offset": 1.02,
-    "on_vocal": 0.923
+    "source": "project",
+    "lines": 39
   },
-  "updated": "2026-10-20T17:35:38"
+  "updated": "2026-10-26T13:02:21"
 }

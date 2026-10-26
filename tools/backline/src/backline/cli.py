@@ -86,9 +86,6 @@ def add(
         help="Bars of count-in before the first downbeat; 0 disables. Default from backline.toml.",
     ),
     count_in_note: int | None = typer.Option(None, help="MIDI note for the count-in click."),
-    metronome: str | None = typer.Option(
-        None, help="Metronome in the render: gaps (where the drums stop), always (every beat), off."
-    ),
     keep_other: bool = typer.Option(False, help="Also save work/no_drums.wav."),
     force: bool = typer.Option(False, help="Ignore cached artifacts and rerun every stage."),
     lyrics: bool = typer.Option(True, "--lyrics/--no-lyrics", help="Look up lyrics on lrclib.net."),
@@ -101,8 +98,8 @@ def add(
         None, help="Shift lyrics by this many seconds instead of measuring against the vocals."
     ),
 ) -> None:
-    """Add a song: analyse SOURCE and write the lyrics, the reference track and the Reaper
-    project that renders the drums into the song's folder."""
+    """Add a song: analyse SOURCE and write the Reaper project (drums as MIDI, lyrics as
+    markers) that renders into the song's folder. From then on the project is the source."""
     from backline.config import load_config
     from backline.pipeline import RunOptions
     from backline.pipeline import run as run_pipeline
@@ -121,10 +118,6 @@ def add(
         bpm=bpm,
         count_in=cfg.count_in_bars if count_in is None else count_in,
         count_in_note=cfg.count_in_note if count_in_note is None else count_in_note,
-        metronome=metronome or cfg.metronome,
-        metronome_min_bars=cfg.metronome_min_bars,
-        metronome_silence_db=cfg.metronome_silence_db,
-        metronome_volume_db=cfg.metronome_volume_db,
         keep_other=keep_other,
         force=force,
         lyrics=lyrics,
@@ -144,11 +137,16 @@ def resimplify(
     count_in: int | None = typer.Option(None),
     count_in_note: int | None = typer.Option(None),
     to: Path | None = typer.Option(None, "--to", help="Song folder for the .lrc and the render."),
-    metronome: str | None = typer.Option(None, help="gaps | always | off"),
     grid: str | None = typer.Option(None, help="auto | straight | tracked"),
     bpm: float | None = typer.Option(None, help="Force a straight grid at this tempo."),
+    overwrite: bool = typer.Option(
+        False, help="Regenerate the project even if Reaper has saved it (your edits are lost)."
+    ),
 ) -> None:
-    """Regenerate notes, MIDI, lyrics files and the Reaper project from cached analysis (fast)."""
+    """Regenerate notes, MIDI and the Reaper project from cached analysis (fast).
+
+    A project Reaper has saved is kept (it is the source); the new MIDI lands in output/ for
+    you to import, unless --overwrite."""
     from backline.pipeline import resimplify as resimplify_pipeline
 
     _execute(
@@ -160,11 +158,22 @@ def resimplify(
             count_in=count_in,
             count_in_note=count_in_note,
             deliver_to=to,
-            metronome=metronome,
             grid=grid,
             bpm=bpm,
+            overwrite=overwrite or None,
         )
     )
+
+
+@app.command()
+def export(
+    job_dir: Path = typer.Argument(..., help="An existing job folder."),
+) -> None:
+    """Update the song folder from the project as saved in Reaper: every marker becomes a
+    line of the .lrc. Run it after editing lyrics (and rendering) in Reaper."""
+    from backline.pipeline import export as export_pipeline
+
+    _execute(lambda reporter: export_pipeline(job_dir.expanduser(), reporter))
 
 
 @app.command()
@@ -197,7 +206,8 @@ def lyrics_cmd(
         None, "--offset", help="Shift lyrics by this many seconds (skips the vocal-stem check)."
     ),
 ) -> None:
-    """Redo only the lyrics (lookup, timing check, lyrics.lrc, markers) for a job."""
+    """Look the lyrics up again (with hints) and put them into the project as markers; a
+    project saved by Reaper keeps everything else. Close it in Reaper first."""
     from backline.pipeline import redo_lyrics
 
     _execute(
@@ -333,10 +343,8 @@ def _print_summary(result) -> None:
         )
     table.add_row("job", escape(str(job.dir)))
     project_note = ""
-    if result.project_path != job.project_path:
-        project_note = (
-            f"  [yellow]({job.project_path.name} was saved by Reaper and left untouched)[/]"
-        )
+    if result.project_kept:
+        project_note = "  [dim](saved by Reaper: kept as the source; new MIDI in output/)[/]"
     elif not result.fx_chain:
         project_note = "  [dim](no drum VSTi template yet; see `backline fx-template`)[/]"
     table.add_row("project", escape(str(result.project_path)) + project_note)
@@ -344,20 +352,38 @@ def _print_summary(result) -> None:
         "  [dim](already imported from this source; folder reused)[/]" if result.deduped else ""
     )
     table.add_row("song folder", escape(str(result.output_dir)) + folder_note)
-    have = [result.outputs["reference"].name]
-    if result.lyrics.get("found"):
-        have.insert(0, result.outputs["lrc"].name)
-    table.add_row("  written", "  ".join(escape(n) for n in have))
-    table.add_row("  to render", escape(result.outputs["render"].name))
+    if result.lyric_lines:
+        origin = "the project's markers" if result.project_kept else "the lookup"
+        table.add_row(
+            "  written",
+            f"{escape(result.outputs['lrc'].name)}  ({result.lyric_lines} lines from {origin})",
+        )
+    else:
+        table.add_row("  written", "[yellow]no .lrc: the project has no markers[/]")
+    render = result.outputs["render"]
+    if not render.exists():
+        table.add_row("  to render", escape(render.name))
+    elif render.stat().st_mtime < result.project_path.stat().st_mtime:
+        table.add_row(
+            "  rendered",
+            f"{escape(render.name)}  [yellow](older than the project; render again?)[/]",
+        )
+    else:
+        table.add_row("  rendered", escape(render.name))
     console.print()
     console.print(table)
     console.print()
-    console.print(
-        "[bold]Next:[/] open the project, File → Render (pre-filled) → "
-        f"[bold]{escape(result.outputs['render'].name)}[/] completes the song folder; "
-        "then `mise run sync-audio`."
-        + ("" if result.lyrics.get("found") else "  [yellow](no lyrics were found)[/]")
-    )
+    if render.exists():
+        console.print(
+            "[bold]Next:[/] edit in Reaper (drums; lyrics are the markers), save, "
+            "render → `backline export`; then `mise run sync-audio`."
+        )
+    else:
+        console.print(
+            "[bold]Next:[/] open the project, File → Render (pre-filled) → "
+            f"[bold]{escape(render.name)}[/] completes the song folder; then `mise run sync-audio`."
+            + ("" if result.lyric_lines else "  [yellow](no lyrics: add markers in Reaper)[/]")
+        )
 
 
 def _lyrics_summary(info: dict) -> str:

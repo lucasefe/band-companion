@@ -574,40 +574,6 @@ button.chip:not(:disabled):active {
   font-variant-numeric: tabular-nums;
 }
 
-.reference-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-}
-
-.reference-row .chip {
-  min-height: 40px;
-  padding: 0 14px;
-  font-size: 14px;
-}
-
-.reference-mute {
-  min-height: 40px;
-  padding: 0 14px;
-  font-size: 14px;
-}
-
-.reference-mute:disabled,
-.reference-volume:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.reference-volume {
-  flex: 1;
-  min-width: 80px;
-  height: 44px;
-  margin: 0;
-  accent-color: var(--accent);
-  touch-action: pan-x;
-}
-
 .transport-row {
   display: grid;
   grid-template-columns: 1fr 1.4fr 1fr;

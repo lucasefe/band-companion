@@ -26,7 +26,6 @@
   "project": "Don't Get Me Wrong.RPP",
   "files": {
     "lyrics": "Don't Get Me Wrong.lrc",
-    "reference": "Don't Get Me Wrong.reference.wav",
     "drums": "Don't Get Me Wrong.wav"
   },
   "timeline": {
@@ -46,14 +45,11 @@
     "inserted": 0,
     "reason": "straight fit too loose (p95 111 ms, max 138 ms)"
   },
-  "metronome": {
-    "mode": "gaps",
-    "gaps": []
-  },
   "lyrics": {
     "source": "lrclib:33375533",
+    "lines": 42,
     "offset": 5.0,
     "on_vocal": 0.971
   },
-  "updated": "2026-10-20T17:35:41"
+  "updated": "2026-10-26T13:02:22"
 }

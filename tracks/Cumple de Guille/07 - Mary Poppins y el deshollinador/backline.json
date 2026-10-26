@@ -26,7 +26,6 @@
   "project": "Mary Poppins y el deshollinador.RPP",
   "files": {
     "lyrics": "Mary Poppins y el deshollinador.lrc",
-    "reference": "Mary Poppins y el deshollinador.reference.wav",
     "drums": "Mary Poppins y el deshollinador.wav"
   },
   "timeline": {
@@ -46,33 +45,11 @@
     "inserted": 0,
     "reason": null
   },
-  "metronome": {
-    "mode": "gaps",
-    "gaps": [
-      {
-        "start": 3.626,
-        "end": 7.253,
-        "bars": 1.5,
-        "bar": 0
-      },
-      {
-        "start": 99.12,
-        "end": 118.46,
-        "bars": 8.0,
-        "bar": 40
-      },
-      {
-        "start": 241.755,
-        "end": 251.426,
-        "bars": 4.0,
-        "bar": 99
-      }
-    ]
-  },
   "lyrics": {
     "source": "lrclib:34736021",
+    "lines": 31,
     "offset": 0.0,
     "on_vocal": 1.0
   },
-  "updated": "2026-10-20T17:35:40"
+  "updated": "2026-10-26T13:02:22"
 }

@@ -197,11 +197,16 @@ instrument once; it is remembered as a template.
   from `~/.config/backline/midi-track.RfxChain` if present (`backline fx-template`).
 - Track 3 "<title> (MIDI daring)": same, hard right, muted, same FX chain (fresh `FXID`).
 - Track 4 "<title> (original)": `original.wav` at `shift`, pan +0.6, −16 dB, on.
-- One `MARKER` per lyric line. Events embedded in Reaper's `E <delta> <status> <d1> <d2>` format
-  from the same `Sequence` as `drums.mid`.
-- **Never overwrite a Reaper save**: if `<Title>.RPP`'s header is not ours, regenerate into
-  `<Title>.new.RPP`.
+- One `MARKER` per lyric line (countdown first). Events embedded in Reaper's
+  `E <delta> <status> <d1> <d2>` format from the same `Sequence` as `drums.mid`.
+- **One project per song; once Reaper has saved it, it is the source.** `backline export`
+  reads the markers back into the `.lrc`; `backline lyrics` swaps only the plain markers;
+  `resimplify` keeps the project (fresh MIDI goes to `output/`) unless `--overwrite`.
 - Format derived from projects saved by Reaper 7 and locked with tests.
+- Tried and dropped (2026-10): a metronome track baked into the render (click in the drum gaps —
+  the gap detection was not reliable enough to trust on stage) and a `.reference.wav` of the
+  original for the app to mix in live (two 60 MB elements in one browser did not stay in
+  lockstep). The render is drums only; what the leader plays is exactly the render.
 
 ### lyrics (studio recordings only — no live/cover timing)
 
@@ -224,12 +229,13 @@ Goal: a line-timed `lyrics.lrc` for Band Companion plus the same lines in Reaper
    cut: +0.80 applied, correct). `--lyrics-offset` overrides. "On-vocal %" = share of lines
    whose start sits on sung audio (−0.15/+0.35 s window) — the reported confidence.
 4. **Outputs.** The lyrics stage writes `lyrics.json` (hints, candidates, offset evidence,
-   lines in song time) and `lyrics.txt`. The **output stage** writes the timed files, because
-   it knows the count-in shift: `lyrics.lrc` on the output timeline (a countdown line per
-   count-in click, then the song, `[length:]` includes the count-in) and `lyrics-original.lrc`
-   in song time for the untouched `original.wav`; plus a Reaper **marker per line** in
-   `project.RPP` and **lyric meta-events** (FF 05, UTF-8) in both `.mid` files. A miss is also written to `lyrics.json` so the stage caches like the rest;
-   `backline lyrics <job-dir>` redoes only this stage with the job's saved options.
+   lines in song time) and `lyrics.txt`. The **output stage** knows the count-in shift and
+   seeds the project with a Reaper **marker per line** (a countdown marker per count-in click,
+   then the song) and **lyric meta-events** (FF 05, UTF-8) in both `.mid` files; the `.lrc`
+   (`[length:]` includes the count-in) is then read back from the project's markers, so it is
+   the same whether the markers came from the lookup or from the user's edits in Reaper. A miss
+   is also written to `lyrics.json` so the stage caches like the rest; `backline lyrics
+   <job-dir>` redoes the lookup with the job's saved options and swaps the markers.
 
 Later: Whisper (`mlx-whisper`) on the vocals stem for songs LRCLIB doesn't have.
 

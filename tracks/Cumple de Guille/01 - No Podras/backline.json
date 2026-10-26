@@ -23,10 +23,9 @@
     }
   },
   "job": "/Users/lucasefe/Music/Backline/jobs/Cristian - No Podras (2e0d9b1a)",
-  "project": "No Podras.new.RPP",
+  "project": "No Podras.RPP",
   "files": {
     "lyrics": "No Podras.lrc",
-    "reference": "No Podras.reference.wav",
     "drums": "No Podras.wav"
   },
   "timeline": {
@@ -46,21 +45,9 @@
     "inserted": 0,
     "reason": null
   },
-  "metronome": {
-    "mode": "gaps",
-    "gaps": [
-      {
-        "start": 240.651,
-        "end": 243.71,
-        "bars": 1.5,
-        "bar": 117
-      }
-    ]
-  },
   "lyrics": {
-    "source": "lrclib:22650621",
-    "offset": 0.0,
-    "on_vocal": 0.868
+    "source": "project",
+    "lines": 38
   },
-  "updated": "2026-10-20T17:35:39"
+  "updated": "2026-10-26T13:02:22"
 }

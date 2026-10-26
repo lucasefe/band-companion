@@ -26,7 +26,6 @@
   "project": "I Touch Myself.RPP",
   "files": {
     "lyrics": "I Touch Myself.lrc",
-    "reference": "I Touch Myself.reference.wav",
     "drums": "I Touch Myself.wav"
   },
   "timeline": {
@@ -46,14 +45,11 @@
     "inserted": 0,
     "reason": "straight fit too loose (p95 56 ms, max 99 ms)"
   },
-  "metronome": {
-    "mode": "gaps",
-    "gaps": []
-  },
   "lyrics": {
     "source": "lrclib:34463062",
+    "lines": 80,
     "offset": 0.0,
     "on_vocal": 0.915
   },
-  "updated": "2026-10-20T17:35:40"
+  "updated": "2026-10-26T13:02:22"
 }

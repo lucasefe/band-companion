@@ -26,7 +26,6 @@
   "project": "Man! I Feel Like A Woman!.RPP",
   "files": {
     "lyrics": "Man! I Feel Like A Woman!.lrc",
-    "reference": "Man! I Feel Like A Woman!.reference.wav",
     "drums": "Man! I Feel Like A Woman!.wav"
   },
   "timeline": {
@@ -46,45 +45,11 @@
     "inserted": 0,
     "reason": null
   },
-  "metronome": {
-    "mode": "gaps",
-    "gaps": [
-      {
-        "start": 2.88,
-        "end": 9.6,
-        "bars": 3.5,
-        "bar": 0
-      },
-      {
-        "start": 84.48,
-        "end": 90.24,
-        "bars": 3.0,
-        "bar": 43
-      },
-      {
-        "start": 147.84,
-        "end": 151.68,
-        "bars": 2.0,
-        "bar": 76
-      },
-      {
-        "start": 205.44,
-        "end": 211.2,
-        "bars": 3.0,
-        "bar": 106
-      },
-      {
-        "start": 234.24,
-        "end": 237.6,
-        "bars": 1.75,
-        "bar": 121
-      }
-    ]
-  },
   "lyrics": {
     "source": "lrclib:37343272",
+    "lines": 58,
     "offset": 0.0,
     "on_vocal": 1.0
   },
-  "updated": "2026-10-20T17:35:41"
+  "updated": "2026-10-26T13:02:22"
 }

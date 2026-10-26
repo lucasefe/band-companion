@@ -16,7 +16,6 @@ HEADER = f'<REAPER_PROJECT 0.1 "7.0/{GENERATOR_TAG}" 0'
 STEM_VOLUME_DB = -9.0
 ORIGINAL_VOLUME_DB = -16.0
 ORIGINAL_PAN = 0.6
-METRONOME_VOLUME_DB = -17.0  # against a drum VSTi at 0 dB; what the user settled on
 
 # Reaper's render-format blob for 24-bit WAV ("evaw" + 0x18 + 0x00 0x01).
 RENDER_CFG_WAV24 = "ZXZhdxgAAQ=="
@@ -59,13 +58,13 @@ def write_rpp(
     stem: AudioTrack,
     midi: list[MidiTrack],
     original: AudioTrack | None = None,
-    metronome: AudioTrack | None = None,
     markers: list[tuple[float, str]] | None = None,
     render: RenderSettings | None = None,
 ) -> None:
     """Reaper project on the same timeline as drums.mid.
 
-    `markers` are (output-time seconds, text) pairs shown on the ruler, e.g. lyric lines.
+    `markers` are (output-time seconds, text) pairs shown on the ruler: the lyric lines. Once
+    Reaper has saved the project they are the lyrics (see read_markers).
     """
     if not midi:
         raise ValueError("at least one MIDI track is required")
@@ -82,10 +81,7 @@ def write_rpp(
             f"    {render.cfg}",
             "  >",
         ]
-    for i, (seconds, text) in enumerate(markers or [], start=1):
-        lines.append(f"  MARKER {i} {_num(max(seconds, 0.0))} {_quote(text)} 0")
-    if metronome is not None:
-        lines += _audio_track(metronome)
+    lines += marker_lines(markers or [])
     lines += _audio_track(stem)
     for m in midi:
         lines += _midi_track(m)
@@ -93,6 +89,60 @@ def write_rpp(
         lines += _audio_track(original)
     lines.append(">")
     path.write_text("\n".join(lines) + "\n")
+
+
+# --- markers: the lyrics live in the project ---------------------------------------------
+
+# `MARKER <n> <pos> <name> <flags> ...`; Reaper appends colour, a GUID and more when it saves.
+# flags 1 = region (a second line with an empty name closes it), 0 = marker.
+_MARKER = re.compile(
+    r'^\s*MARKER\s+(\d+)\s+(-?[\d.]+(?:[eE][-+]?\d+)?)\s+("[^"]*"|\'[^\']*\'|`[^`]*`|\S+)\s+(\d+)'
+)
+
+
+def marker_lines(markers: list[tuple[float, str]]) -> list[str]:
+    return [
+        f"  MARKER {i} {_num(max(seconds, 0.0))} {_quote(text)} 0"
+        for i, (seconds, text) in enumerate(markers, start=1)
+    ]
+
+
+def read_markers(rpp_text: str) -> list[tuple[float, str]]:
+    """(seconds, text) of every plain marker, in time order; regions are not lyrics."""
+    found: list[tuple[float, str]] = []
+    for line in rpp_text.splitlines():
+        m = _MARKER.match(line)
+        if m and int(m.group(4)) & 1 == 0:
+            found.append((float(m.group(2)), _unquote(m.group(3))))
+    found.sort(key=lambda x: x[0])
+    return found
+
+
+def replace_markers(rpp_text: str, markers: list[tuple[float, str]]) -> str:
+    """The same project with its plain markers swapped for `markers`; everything else, regions
+    included, is left byte for byte. Reaper re-assigns GUIDs and colours when it next saves."""
+    kept: list[str] = []
+    insert_at: int | None = None
+    for line in rpp_text.splitlines():
+        m = _MARKER.match(line)
+        if m and int(m.group(4)) & 1 == 0:
+            if insert_at is None:
+                insert_at = len(kept)
+            continue
+        kept.append(line)
+    if insert_at is None:
+        # No markers yet: before the first track, else before the closing bracket.
+        insert_at = next(
+            (i for i, ln in enumerate(kept) if ln.startswith("  <TRACK")), len(kept) - 1
+        )
+    kept[insert_at:insert_at] = marker_lines(markers)
+    return "\n".join(kept) + "\n"
+
+
+def _unquote(token: str) -> str:
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in "\"'`":
+        return token[1:-1]
+    return token
 
 
 def is_generated(path: Path) -> bool:
@@ -248,7 +298,12 @@ def _guid() -> str:
 
 
 def _quote(s: str) -> str:
-    return '"' + s.replace('"', "'") + '"'
+    """Reaper's own rule: double quotes unless the text has them, then single, then backticks."""
+    if '"' not in s:
+        return f'"{s}"'
+    if "'" not in s:
+        return f"'{s}'"
+    return "`" + s.replace("`", "'") + "`"
 
 
 def _num(x: float) -> str:

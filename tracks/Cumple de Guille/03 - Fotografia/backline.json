@@ -26,7 +26,6 @@
   "project": "Fotografia.RPP",
   "files": {
     "lyrics": "Fotografia.lrc",
-    "reference": "Fotografia.reference.wav",
     "drums": "Fotografia.wav"
   },
   "timeline": {
@@ -46,33 +45,11 @@
     "inserted": 0,
     "reason": null
   },
-  "metronome": {
-    "mode": "gaps",
-    "gaps": [
-      {
-        "start": 4.941,
-        "end": 16.941,
-        "bars": 4.25,
-        "bar": 0
-      },
-      {
-        "start": 175.055,
-        "end": 197.643,
-        "bars": 8.0,
-        "bar": 61
-      },
-      {
-        "start": 239.995,
-        "end": 249.171,
-        "bars": 3.25,
-        "bar": 84
-      }
-    ]
-  },
   "lyrics": {
     "source": "lrclib:33616122",
+    "lines": 54,
     "offset": 0.8,
     "on_vocal": 1.0
   },
-  "updated": "2026-10-20T17:35:40"
+  "updated": "2026-10-26T13:02:22"
 }

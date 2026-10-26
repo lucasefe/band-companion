@@ -45,29 +45,19 @@ let uploaded = 0
 let skipped = 0
 let failed = 0
 
-// A song folder holds the track the band plays along to (`<Title>.wav`) and, optionally,
-// the original song as `<Title>.reference.wav` for the leader to mix in.
+// A song folder holds one audio file: the track the band plays along to (`<Title>.wav`).
 const folders = new Map()
 for (const source of sources) {
   const folder = relative(ROOT, dirname(source)).normalize('NFC')
-  const role = basename(source).toLowerCase().endsWith('.reference.wav') ? 'reference' : 'main'
-  const roles = folders.get(folder) ?? {}
-  if (roles[role]) {
-    console.error(`  more than one ${role} audio file in ${folder}; using ${basename(roles[role])}`)
+  if (folders.has(folder)) {
+    console.error(`  more than one audio file in ${folder}; using ${basename(folders.get(folder))}`)
     continue
   }
-  roles[role] = source
-  folders.set(folder, roles)
+  folders.set(folder, source)
 }
 
-for (const [folder, roles] of folders) {
-  if (!roles.main) {
-    console.error(`  ${folder} has a reference but no main audio file; skipped`)
-    continue
-  }
-  const entry = await sync(folder, roles.main, previous[folder])
-  if (roles.reference) entry.reference = await sync(`${folder} (reference)`, roles.reference, previous[folder]?.reference)
-  manifest[folder] = entry
+for (const [folder, source] of folders) {
+  manifest[folder] = await sync(folder, source, previous[folder])
 }
 
 async function sync(label, source, before) {

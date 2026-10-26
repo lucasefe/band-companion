@@ -13,14 +13,3 @@ default_set = "Cumple de Guille"
 [count_in]
 bars = 2
 note = 37   # GM side stick, what the MIDI tracks play during the count-in
-
-[metronome]
-# A plain click on every quarter note, rendered hard left in the Reaper project (MIDI drums go
-# hard right):
-#   gaps   – only where the drums drop out (intros, breakdowns, stops), plus the count-in (default)
-#   always – every beat
-#   off
-mode = "gaps"
-volume_db = -17       # metronome track level in the Reaper project (drum VSTi at 0 dB)
-min_gap_bars = 1      # gaps mode: shorter silences are left alone
-silence_db = -30      # gaps mode: how far below the song's usual drum level counts as silence

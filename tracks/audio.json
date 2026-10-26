@@ -5,15 +5,7 @@
     "source": "No Podras-001.wav",
     "uploaded": [
       "remote"
-    ],
-    "reference": {
-      "key": "6ec56683159776e7.wav",
-      "bytes": 42910660,
-      "source": "No Podras.reference.wav",
-      "uploaded": [
-        "remote"
-      ]
-    }
+    ]
   },
   "Cumple de Guille/02 - Don't Get Me Wrong": {
     "key": "30287a35d1f044fe.wav",
@@ -21,15 +13,7 @@
     "source": "Don't Get Me Wrong-001.wav",
     "uploaded": [
       "remote"
-    ],
-    "reference": {
-      "key": "3fcdef7f4f4dc2da.wav",
-      "bytes": 41157488,
-      "source": "Don't Get Me Wrong.reference.wav",
-      "uploaded": [
-        "remote"
-      ]
-    }
+    ]
   },
   "Cumple de Guille/03 - Fotografia": {
     "key": "551caecaec8a414a.wav",
@@ -37,15 +21,7 @@
     "source": "Fotografia-001.wav",
     "uploaded": [
       "remote"
-    ],
-    "reference": {
-      "key": "ff46491178445548.wav",
-      "bytes": 43903544,
-      "source": "Fotografia.reference.wav",
-      "uploaded": [
-        "remote"
-      ]
-    }
+    ]
   },
   "Cumple de Guille/04 - Man! I Feel Like A Woman!": {
     "key": "abe25f8d9cad40e3.wav",
@@ -53,15 +29,7 @@
     "source": "Man! I Feel Like A Woman!-001.wav",
     "uploaded": [
       "remote"
-    ],
-    "reference": {
-      "key": "66e45dec63fcedcf.wav",
-      "bytes": 41909756,
-      "source": "Man! I Feel Like A Woman!.reference.wav",
-      "uploaded": [
-        "remote"
-      ]
-    }
+    ]
   },
   "Cumple de Guille/05 - Summer Of 69": {
     "key": "8ed57aacecb8c097.wav",
@@ -69,15 +37,7 @@
     "source": "Summer Of 69-001.wav",
     "uploaded": [
       "remote"
-    ],
-    "reference": {
-      "key": "14f5f5347020235a.wav",
-      "bytes": 37085696,
-      "source": "Summer Of 69.reference.wav",
-      "uploaded": [
-        "remote"
-      ]
-    }
+    ]
   },
   "Cumple de Guille/06 - I Touch Myself": {
     "key": "1f2c59d85419e263.wav",
@@ -85,15 +45,7 @@
     "source": "I Touch Myself-001.wav",
     "uploaded": [
       "remote"
-    ],
-    "reference": {
-      "key": "ca3b18c4bebee545.wav",
-      "bytes": 39434108,
-      "source": "I Touch Myself.reference.wav",
-      "uploaded": [
-        "remote"
-      ]
-    }
+    ]
   },
   "Cumple de Guille/07 - Mary Poppins y el deshollinador": {
     "key": "922e60087f6a2685.wav",
@@ -101,15 +53,7 @@
     "source": "Mary Poppins y el deshollinador-001.wav",
     "uploaded": [
       "remote"
-    ],
-    "reference": {
-      "key": "b89bd1f65ce5351b.wav",
-      "bytes": 44337332,
-      "source": "Mary Poppins y el deshollinador.reference.wav",
-      "uploaded": [
-        "remote"
-      ]
-    }
+    ]
   },
   "Cumple de Guille/08 - Ironic": {
     "key": "5199c89eaee73b6d.wav",
@@ -117,14 +61,6 @@
     "source": "Ironic-001.wav",
     "uploaded": [
       "remote"
-    ],
-    "reference": {
-      "key": "3eb9da2f4b0300b0.wav",
-      "bytes": 41232132,
-      "source": "Ironic.reference.wav",
-      "uploaded": [
-        "remote"
-      ]
-    }
+    ]
   }
 }

@@ -24,8 +24,6 @@ BEATS = f"{WORK}/beats.json"  # raw tracker output
 GRID = f"{WORK}/grid.json"  # the grid the song is played to (straight fit or cleaned tracked)
 LYRICS_JSON = f"{WORK}/lyrics.json"
 LYRICS_TXT = f"{WORK}/lyrics.txt"
-LYRICS_ORIGINAL = f"{WORK}/lyrics-original.lrc"
-METRONOME = f"{WORK}/metronome.wav"
 
 
 def notes_file(profile: str, primary: str) -> str:

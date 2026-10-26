@@ -16,13 +16,13 @@ from backline.job import DEFAULT_ROOT, Job, source_hash
 
 PRIMARY = "conservative"  # the unmuted MIDI track and <title>.mid; other profiles get a suffix
 GRID_VERSION = 3  # bump when choose_grid() changes; the tempo stage is cached on it
-OUTPUT_FORMAT = 15  # bump when the output stage writes different files/content for the same inputs
+OUTPUT_FORMAT = 16  # bump when the output stage writes different files/content for the same inputs
 
 
 @dataclass
 class RunOptions:
     out_root: Path = DEFAULT_ROOT
-    deliver_to: Path | None = None  # explicit song folder for .lrc, reference and the render
+    deliver_to: Path | None = None  # explicit song folder for the .lrc and the render
     set_name: str | None = None  # else tracks/<set>/<NN - Title> from backline.toml
     number: int | None = None
     quality: str = "fast"
@@ -34,12 +34,9 @@ class RunOptions:
     bpm: float | None = None  # force a straight grid at this tempo
     count_in: int = 2
     count_in_note: int = 37
-    metronome: str = "gaps"  # gaps | always | off
-    metronome_min_bars: int = 1
-    metronome_silence_db: float = -30.0
-    metronome_volume_db: float = -17.0  # track level in the Reaper project
     keep_other: bool = False
     force: bool = False
+    overwrite: bool = False  # regenerate the project even after Reaper has saved it
     # lyrics
     lyrics: bool = True
     artist: str | None = None
@@ -71,8 +68,10 @@ class RunResult:
     lyrics: dict[str, Any]  # contents of lyrics.json
     project_path: Path
     output_dir: Path
-    outputs: dict[str, Path]  # lrc / reference / midi / render target
+    outputs: dict[str, Path]  # lrc / midi / render target
     fx_chain: bool
+    project_kept: bool = False  # Reaper owns the project; it was read, not written
+    lyric_lines: int = 0  # markers exported to the .lrc
     deduped: bool = False  # the song folder already existed for this source
     timings: dict[str, float] = field(default_factory=dict)
 
@@ -167,10 +166,24 @@ def redo_lyrics(
     config: Config | None = None,
     **overrides: Any,
 ) -> RunResult:
-    """Force the lyrics stage (and therefore the outputs) with the saved options plus overrides."""
+    """Look the lyrics up again with the saved options plus overrides and put them into the
+    project: regenerated when it is still ours, markers swapped in place once Reaper owns it."""
     job = Job.open(job_dir)
     opts = options_from_job(job, **overrides)
-    return _Runner(job, opts, reporter or NullReporter(), rerun={"lyrics"}, config=config).process()
+    return _Runner(
+        job, opts, reporter or NullReporter(), rerun={"lyrics"}, replace_lyrics=True, config=config
+    ).process()
+
+
+def export(
+    job_dir: Path,
+    reporter: Reporter | None = None,
+    config: Config | None = None,
+) -> RunResult:
+    """Song folder from the project as saved by Reaper: the markers become the .lrc."""
+    job = Job.open(job_dir)
+    opts = options_from_job(job)
+    return _Runner(job, opts, reporter or NullReporter(), rerun={"output"}, config=config).process()
 
 
 def rename(
@@ -197,17 +210,16 @@ def rename(
     new_stem = job.file_stem
     job.save()
 
-    # Project files keep working under the new name; the output stage refreshes their contents.
-    for suffix in (".RPP", ".new.RPP"):
-        old_path = job.dir / f"{old_stem}{suffix}"
-        if old_path.exists() and new_stem != old_stem:
-            old_path.rename(job.dir / f"{new_stem}{suffix}")
+    # The project keeps working under the new name; the output stage refreshes it if it is ours.
+    old_path = job.dir / f"{old_stem}.RPP"
+    if old_path.exists() and new_stem != old_stem:
+        old_path.rename(job.dir / f"{new_stem}.RPP")
 
     # Song folder: keep its number, rename the folder and the deliverables inside it.
     saved = job.manifest.get("options", {})
     folder = Path(saved["deliver_to"]) if saved.get("deliver_to") else None
     if folder and folder.is_dir() and new_stem != old_stem:
-        for ext in (".lrc", ".wav", ".reference.wav", ".mid"):
+        for ext in (".lrc", ".wav", ".mid"):
             src = folder / f"{old_stem}{ext}"
             if src.exists():
                 src.rename(folder / f"{new_stem}{ext}")
@@ -249,16 +261,6 @@ def options_from_job(job: Job, **overrides: Any) -> RunOptions:
     return RunOptions(**kwargs)
 
 
-def project_target(job: Job) -> Path:
-    """Where to write the Reaper project: never over a file Reaper has saved (user edits)."""
-    from backline.reaper import is_generated
-
-    main = job.project_path
-    if main.exists() and not is_generated(main):
-        return main.with_name(f"{job.file_stem}.new.RPP")
-    return main
-
-
 def _write_source_json(job: Job, payload: dict[str, Any]) -> None:
     payload["ingested_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     job.path(J.SOURCE_JSON).write_text(json.dumps(payload, indent=1, ensure_ascii=False))
@@ -273,12 +275,14 @@ class _Runner:
         opts: RunOptions,
         reporter: Reporter,
         rerun: set[str] | None = None,
+        replace_lyrics: bool = False,
         config: Config | None = None,
     ) -> None:
         self.job = job
         self.opts = opts
         self.reporter = reporter
         self.rerun = rerun or set()
+        self.replace_lyrics = replace_lyrics  # swap the markers of a Reaper-saved project
         self.config = config or load_config()
         self.dirty = opts.force
         self.timings: dict[str, float] = {}
@@ -314,7 +318,7 @@ class _Runner:
 
     def process(self) -> RunResult:
         from backline.audio import duration_seconds
-        from backline.metronome import detect_gaps, gaps_in_seconds, write_metronome
+        from backline.lyrics import countdown_lines
         from backline.midi_out import CountIn, build_sequence, write_midi
         from backline.reaper import (
             ORIGINAL_PAN,
@@ -323,10 +327,12 @@ class _Runner:
             AudioTrack,
             MidiTrack,
             RenderSettings,
+            is_generated,
             load_fx_template,
+            read_markers,
+            replace_markers,
             write_rpp,
         )
-        from backline.reference import write_reference
         from backline.separate import MODELS, separate
         from backline.simplify import (
             PROFILES,
@@ -455,12 +461,18 @@ class _Runner:
         layout = seqs[PRIMARY].layout
         song_lines = [(t, text) for t, text in lyrics_info.get("lines_song_time", [])]
         lyric_lines = [(t + layout.shift, text) for t, text in song_lines]
+        # The markers the project starts with: the countdown, then the lines found.
+        countdown = (
+            countdown_lines(layout.count_in_start, count_in.bars, layout.meter, 60.0 / layout.bpm)
+            if count_in and song_lines
+            else []
+        )
+        initial_markers = countdown + lyric_lines
 
         out_dir = self._resolve_output_dir()
         stem = job.file_stem
         outputs = {
             "lrc": out_dir / f"{stem}.lrc",
-            "reference": out_dir / f"{stem}.reference.wav",
             "render": out_dir / f"{stem}.wav",
             "midi": job.path(J.OUTPUT) / f"{stem}.mid",
             "midi_daring": job.path(J.OUTPUT) / f"{stem} (daring).mid",
@@ -472,25 +484,10 @@ class _Runner:
             "tempo": "constant",
             "format": OUTPUT_FORMAT,
             "output_dir": str(out_dir),
-            "metronome": [
-                opts.metronome,
-                opts.metronome_min_bars,
-                opts.metronome_silence_db,
-                opts.metronome_volume_db,
-            ],
         }
         fx_chain = load_fx_template()
-        gaps = (
-            detect_gaps(
-                job.path(J.DRUMS),
-                beats,
-                min_bars=opts.metronome_min_bars,
-                silence_db=opts.metronome_silence_db,
-            )
-            if opts.metronome != "off"
-            else []
-        )
-        gap_info = gaps_in_seconds(gaps, beats, layout.shift)
+        rpp_path = job.project_path
+        duration = duration_seconds(job.path(J.ORIGINAL))
 
         def do_output() -> dict:
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -498,92 +495,77 @@ class _Runner:
                 write_midi(
                     midi_files[profile], seq, track_name=f"{stem} {profile}", lyrics=lyric_lines
                 )
-            self._write_lrc_files(
-                outputs["lrc"], lyrics_info, song_lines, lyric_lines, layout, count_in
-            )
-            write_reference(job.path(J.ORIGINAL), outputs["reference"], layout, count_in)
-            duration = duration_seconds(job.path(J.ORIGINAL))
-            write_metronome(
-                job.path(J.METRONOME),
-                layout,
-                beats,
-                gaps,
-                mode=opts.metronome,
-                count_in=count_in,
-                tail_seconds=max(0.0, layout.shift + duration - (beats.beats[-1] + layout.shift)),
-            )
-            rpp_path = project_target(job)
-            write_rpp(
-                rpp_path,
-                # The practice mix: real drums muted (unmute to compare), MIDI drums centred,
-                # the song quiet on the right so the drummer can hear it without it dominating.
-                stem=AudioTrack(
-                    name=f"{stem} (drums)",
-                    file=J.DRUMS,
-                    duration=duration,
-                    position=layout.shift,
-                    pan=-1.0,
-                    volume_db=STEM_VOLUME_DB,
-                    muted=True,
-                ),
-                # The render is the band's track: MIDI drums in the centre, metronome hard left
-                # (the click can still be isolated by taking the left channel's difference).
-                metronome=AudioTrack(
-                    name=f"{stem} (metronome)",
-                    file=J.METRONOME,
-                    duration=layout.shift + duration,
-                    position=0.0,
-                    pan=-1.0,
-                    volume_db=opts.metronome_volume_db,
-                ),
-                midi=[
-                    MidiTrack(
-                        name=f"{stem} (MIDI {profile})",
-                        item_name=f"{stem} {profile}",
-                        seq=seq,
-                        pan=0.0,
-                        muted=profile != PRIMARY,
-                        fx_chain=fx_chain,
-                    )
-                    for profile, seq in seqs.items()
-                ],
-                # Muted so the render is drums only; the app mixes the reference in live.
-                original=AudioTrack(
-                    name=f"{stem} (original)",
-                    file=J.ORIGINAL,
-                    duration=duration,
-                    position=layout.shift,
-                    pan=ORIGINAL_PAN,
-                    volume_db=ORIGINAL_VOLUME_DB,
-                    muted=True,
-                ),
-                markers=lyric_lines,
-                render=RenderSettings(directory=str(out_dir), pattern=stem),
-            )
+            # The project is ours until Reaper saves it; from then on it is the source and only
+            # its lyrics can be swapped (backline lyrics), or the whole thing with --overwrite.
+            kept = rpp_path.exists() and not is_generated(rpp_path) and not opts.overwrite
+            if not kept:
+                write_rpp(
+                    rpp_path,
+                    # The practice mix: real drums muted (unmute to compare), MIDI drums centred,
+                    # the song quiet on the right so the drummer can hear it without it
+                    # dominating; muted so the render is drums only.
+                    stem=AudioTrack(
+                        name=f"{stem} (drums)",
+                        file=J.DRUMS,
+                        duration=duration,
+                        position=layout.shift,
+                        pan=-1.0,
+                        volume_db=STEM_VOLUME_DB,
+                        muted=True,
+                    ),
+                    midi=[
+                        MidiTrack(
+                            name=f"{stem} (MIDI {profile})",
+                            item_name=f"{stem} {profile}",
+                            seq=seq,
+                            pan=0.0,
+                            muted=profile != PRIMARY,
+                            fx_chain=fx_chain,
+                        )
+                        for profile, seq in seqs.items()
+                    ],
+                    original=AudioTrack(
+                        name=f"{stem} (original)",
+                        file=J.ORIGINAL,
+                        duration=duration,
+                        position=layout.shift,
+                        pan=ORIGINAL_PAN,
+                        volume_db=ORIGINAL_VOLUME_DB,
+                        muted=True,
+                    ),
+                    markers=initial_markers,
+                    render=RenderSettings(directory=str(out_dir), pattern=stem),
+                )
+            elif self.replace_lyrics and initial_markers:  # a miss keeps what is there
+                rpp_path.write_text(
+                    replace_markers(rpp_path.read_text(encoding="utf-8"), initial_markers),
+                    encoding="utf-8",
+                )
+            markers = read_markers(rpp_path.read_text(encoding="utf-8"))
+            self._write_lrc(outputs["lrc"], markers, lyrics_info, layout.shift + duration)
             write_record(
                 out_dir,
-                self._song_record(outputs, rpp_path, layout, lyrics_info, gap_info, grid_info),
+                self._song_record(outputs, rpp_path, layout, lyrics_info, grid_info, markers, kept),
             )
             return {
                 "shift": layout.shift,
                 "count_in_seconds": layout.count_in_seconds,
                 "project": rpp_path.name,
+                "project_kept": kept,
+                "lyric_lines": len(markers),
                 "output_dir": str(out_dir),
                 "fx_chain": fx_chain is not None,
+                "detail": f"{len(markers)} lines"
+                + (" from the saved project" if kept else "")
+                + (" + .mid + .rpp" if not kept else " + .mid"),
             }
 
         self.stage(
             "output",
             output_params,
             do_output,
-            [
-                outputs["midi"],
-                outputs["midi_daring"],
-                outputs["reference"],
-                J.METRONOME,
-                job.project_path,
-            ],
-            detail="midi + lrc + reference + metronome + rpp",
+            [outputs["midi"], outputs["midi_daring"], job.project_path],
+            detail="midi + lrc + rpp",
         )
         info = job.stage_info("output")
 
@@ -597,6 +579,8 @@ class _Runner:
             output_dir=out_dir,
             outputs=outputs,
             fx_chain=bool(info.get("fx_chain")),
+            project_kept=bool(info.get("project_kept")),
+            lyric_lines=int(info.get("lyric_lines", 0)),
             deduped=self.deduped is not None,
             timings=self.timings,
         )
@@ -629,7 +613,7 @@ class _Runner:
         return out
 
     def _song_record(
-        self, outputs, rpp_path, layout, lyrics_info, gaps, grid_info
+        self, outputs, rpp_path, layout, lyrics_info, grid_info, markers, project_kept
     ) -> dict[str, Any]:
         """What goes into the song folder's backline.json."""
         from backline import __version__
@@ -650,8 +634,7 @@ class _Runner:
             "job": str(job.dir),
             "project": rpp_path.name,
             "files": {
-                "lyrics": outputs["lrc"].name if lyrics_info.get("found") else None,
-                "reference": outputs["reference"].name,
+                "lyrics": outputs["lrc"].name if markers else None,
                 "drums": outputs["render"].name,
             },
             "timeline": {
@@ -662,14 +645,23 @@ class _Runner:
                 "meter": layout.meter,
             },
             "grid": asdict(grid_info),
-            "metronome": {"mode": self.opts.metronome, "gaps": gaps},
-            "lyrics": {
-                "source": lyrics.get("source"),
-                "offset": lyrics.get("offset", 0.0),
-                "on_vocal": lyrics.get("confidence"),
-            }
-            if lyrics_info.get("found")
-            else {"found": False, "reason": lyrics_info.get("reason") or lyrics_info.get("error")},
+            # Where the .lrc lines come from: the project once Reaper has saved it, else the
+            # lookup that seeded its markers.
+            "lyrics": (
+                {"source": "project", "lines": len(markers)}
+                if project_kept
+                else {
+                    "source": lyrics.get("source"),
+                    "lines": len(markers),
+                    "offset": lyrics.get("offset", 0.0),
+                    "on_vocal": lyrics.get("confidence"),
+                }
+                if lyrics_info.get("found")
+                else {
+                    "found": False,
+                    "reason": lyrics_info.get("reason") or lyrics_info.get("error"),
+                }
+            ),
         }
 
     def _do_lyrics(self) -> dict:
@@ -762,41 +754,21 @@ class _Runner:
 
         save_lyrics_json(self.job.path(J.LYRICS_JSON), payload)
 
-    def _write_lrc_files(self, lrc_path, lyrics_info, song_lines, lyric_lines, layout, count_in):
-        """`<stem>.lrc` on the count-in timeline (with a visible countdown) in the output folder;
-        `work/lyrics-original.lrc` in song time for the untouched original."""
-        from backline.audio import duration_seconds
-        from backline.lyrics import countdown_lines, format_lrc
+    def _write_lrc(self, lrc_path, markers, lyrics_info, total_seconds):
+        """`<stem>.lrc` in the song folder: the project's markers, on the project timeline."""
+        from backline.lyrics import format_lrc
 
-        job = self.job
-        lrc_path.unlink(missing_ok=True)
-        job.path(J.LYRICS_ORIGINAL).unlink(missing_ok=True)
-        if not song_lines:
+        if not markers:
+            lrc_path.unlink(missing_ok=True)
             return
-
         meta = lyrics_info.get("lyrics", {}).get("meta", {})
         base = lyrics_info.get("header") or {
-            "ar": meta.get("artist", ""),
-            "ti": meta.get("title", ""),
+            "ar": meta.get("artist") or self.job.artist or "",
+            "ti": meta.get("title") or self.job.title,
             "al": meta.get("album", ""),
         }
-
-        def header(total_seconds: float) -> dict[str, str]:
-            return dict(base) | {
-                "length": f"{int(total_seconds // 60):02d}:{int(total_seconds % 60):02d}",
-                "re": "backline",
-            }
-
-        duration = duration_seconds(job.path(J.ORIGINAL))
-        countdown = (
-            countdown_lines(layout.count_in_start, count_in.bars, layout.meter, 60.0 / layout.bpm)
-            if count_in
-            else []
-        )
-        lrc_path.write_text(
-            format_lrc(countdown + lyric_lines, header=header(layout.shift + duration)),
-            encoding="utf-8",
-        )
-        job.path(J.LYRICS_ORIGINAL).write_text(
-            format_lrc(song_lines, header=header(duration)), encoding="utf-8"
-        )
+        header = dict(base) | {
+            "length": f"{int(total_seconds // 60):02d}:{int(total_seconds % 60):02d}",
+            "re": "backline",
+        }
+        lrc_path.write_text(format_lrc(markers, header=header), encoding="utf-8")

@@ -26,7 +26,6 @@
   "project": "Summer Of 69.RPP",
   "files": {
     "lyrics": "Summer Of 69.lrc",
-    "reference": "Summer Of 69.reference.wav",
     "drums": "Summer Of 69.wav"
   },
   "timeline": {
@@ -46,21 +45,11 @@
     "inserted": 0,
     "reason": null
   },
-  "metronome": {
-    "mode": "gaps",
-    "gaps": [
-      {
-        "start": 3.464,
-        "end": 20.783,
-        "bars": 10.0,
-        "bar": 1
-      }
-    ]
-  },
   "lyrics": {
     "source": "lrclib:37357273",
+    "lines": 53,
     "offset": 0.56,
     "on_vocal": 0.933
   },
-  "updated": "2026-10-20T17:35:39"
+  "updated": "2026-10-26T13:02:22"
 }

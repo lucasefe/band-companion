@@ -64,7 +64,7 @@ def test_midi_track_mirrors_the_sequence(project: str):
     assert "VOLPAN 1 1 -1 -1 1" in midi  # hard right
     assert "MUTESOLO 0 0 0" in midi
     assert "NAME \"Song 'A' (MIDI)\"" in midi
-    assert "NAME \"Song 'A'\"" in midi, "double quotes are not allowed inside names"
+    assert "NAME 'Song \"A\"'" in midi, "double quotes inside a name switch to single quotes"
     assert "POSITION 0\n" in midi
     assert f"HASDATA 1 {PPQ} QN" in midi
 
@@ -92,7 +92,7 @@ def test_markers_are_written_at_project_level(loop_beats, tmp_path: Path):
     )
     text = path.read_text()
     head = text.split("<TRACK")[0]
-    assert "  MARKER 1 19.89 \"Tal vez te 'olvides'\" 0\n" in head
+    assert "  MARKER 1 19.89 'Tal vez te \"olvides\"' 0\n" in head, "Reaper's quoting rules"
     assert '  MARKER 2 0 "clamped" 0\n' in head
 
 
@@ -195,14 +195,50 @@ def test_load_fx_template_accepts_a_wrapped_block(tmp_path: Path):
     assert load_fx_template(tmp_path / "none") is None
 
 
-def test_project_target_never_overwrites_a_reaper_save(tmp_path: Path):
-    from backline.job import Job
-    from backline.pipeline import project_target
-    from backline.reaper import HEADER
+SAVED_MARKERS = """<REAPER_PROJECT 0.1 "7.82/macOS-arm64" 1792499948 0
+  TEMPO 120 4 4 0
+  MARKER 2 23.36 "Tal vez me olvide de ti" 0 0 1 B {6B7130E6-71FF-5A4B-AF86-710EDE4998BF} 0 2
+  MARKER 1 19.37 'He said "no"' 0 0 1 B {411FC3FC-BCA5-574D-8129-F7738EE224F3} 0 2
+  MARKER 3 0 "" 0 0 1 B {AE96A34B-A2B0-8545-8BF7-2CF94B329A80} 0 2
+  MARKER 4 40 "Chorus" 1 0 1 B {B34B5764-9C31-5F42-AE61-7845D97AF0EE} 0 2
+  MARKER 4 52.5 "" 1
+  <TRACK {AAA}
+    NAME "Song (drums)"
+  >
+>
+"""
 
-    job = Job.create(tmp_path, title="Song", artist=None, source="/x.wav", hash="abcd1234")
-    assert project_target(job) == job.dir / "Song.RPP"
-    job.project_path.write_text(HEADER + "\n>\n")
-    assert project_target(job) == job.dir / "Song.RPP", "our own file is fair game"
-    job.project_path.write_text(SAVED_BY_REAPER)
-    assert project_target(job) == job.dir / "Song.new.RPP"
+
+def test_read_markers_from_a_reaper_save():
+    from backline.reaper import read_markers
+
+    assert read_markers(SAVED_MARKERS) == [
+        (0.0, ""),
+        (19.37, 'He said "no"'),
+        (23.36, "Tal vez me olvide de ti"),
+    ], "time order, Reaper's quoting undone, regions left out"
+    assert read_markers(SAVED_BY_REAPER) == []
+
+
+def test_replace_markers_keeps_everything_else():
+    from backline.reaper import read_markers, replace_markers
+
+    out = replace_markers(SAVED_MARKERS, [(1.5, "new line"), (0.0, "1")])
+    assert read_markers(out) == [(0.0, "1"), (1.5, "new line")]
+    assert "{6B7130E6" not in out and "He said" not in out
+    assert '  MARKER 4 40 "Chorus" 1 0 1 B {B34B5764' in out and '  MARKER 4 52.5 "" 1' in out
+    assert out.startswith('<REAPER_PROJECT 0.1 "7.82/macOS-arm64"'), "still Reaper's file"
+    assert out.index("MARKER 1 1.5") < out.index("<TRACK"), "markers go where they were"
+
+    out = replace_markers(SAVED_BY_REAPER, [(2.0, "first")])
+    assert read_markers(out) == [(2.0, "first")]
+    assert out.index('MARKER 1 2 "first" 0') < out.index("<TRACK {AAA}"), "before the tracks"
+    assert out.endswith(">\n")
+
+
+def test_quote_follows_reaper():
+    from backline.reaper import _quote
+
+    assert _quote("plain") == '"plain"'
+    assert _quote('say "hi"') == "'say \"hi\"'"
+    assert _quote('don\'t say "hi"') == '`don\'t say "hi"`'

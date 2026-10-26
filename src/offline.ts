@@ -23,24 +23,16 @@ export async function cachedTrackIds(tracks: Track[]): Promise<Set<string>> {
   return ids
 }
 
-// `withReferences`: also store each track's reference (the original song), which the leader
-// mixes in when it has the reference turned on. It doubles the data, so it is opt-in.
 export async function downloadTracks(
   tracks: Track[],
   onProgress: (progress: OfflineProgress) => void,
   signal?: AbortSignal,
-  withReferences = false,
 ): Promise<void> {
   const cache = await caches.open(TRACK_CACHE)
-  const files: { url: string; track: Track }[] = []
-  for (const track of tracks) {
-    files.push({ url: track.url, track })
-    if (withReferences && track.reference) files.push({ url: track.reference.url, track })
-  }
+  const files = tracks.map((track) => ({ url: track.url, track }))
   const wanted = new Set(files.map((f) => new URL(f.url, location.href).href))
 
-  // Drop entries for tracks that no longer exist (renamed, re-encoded, removed) and
-  // references that are no longer wanted.
+  // Drop entries for tracks that no longer exist (renamed, re-encoded, removed).
   for (const req of await cache.keys()) {
     if (!wanted.has(req.url)) await cache.delete(req)
   }

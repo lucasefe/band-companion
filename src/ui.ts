@@ -2,7 +2,6 @@ import { el, formatTime } from './dom'
 import { LyricsView } from './lyrics-view'
 import { formatBytes, type OfflineProgress } from './offline'
 import type { PlayerState } from './player'
-import type { ReferenceState } from './reference'
 import type { LeaderLink } from './sync'
 import { describe, type Track, type TrackSet } from './tracks'
 import type { WakeLockStatus } from './wakelock'
@@ -25,10 +24,6 @@ export interface UIHandlers {
   onDownload: () => void
   onReload: () => void
   onStepDown: () => void
-  // Reference track (the original song under the drums), leader only.
-  onReference: () => void
-  onReferenceMute: (muted: boolean) => void
-  onReferenceVolume: (volume: number) => void
   // Playback position in seconds, read every frame while playing.
   getTime: () => number
 }
@@ -61,10 +56,6 @@ export class UI {
   private readonly playButton: HTMLButtonElement
   private readonly pauseButton: HTMLButtonElement
   private readonly restartButton: HTMLButtonElement
-  private readonly referenceRow: HTMLElement
-  private readonly referenceChip: HTMLButtonElement
-  private readonly referenceMute: HTMLButtonElement
-  private readonly referenceVolume: HTMLInputElement
   private readonly toast: HTMLElement
 
   private activeSetId: string | null = null
@@ -114,29 +105,6 @@ export class UI {
     this.playButton.addEventListener('click', () => this.handlers.onPlay())
     this.pauseButton.addEventListener('click', () => this.handlers.onPause())
 
-    this.referenceChip = el('button', { class: 'chip chip-reference', type: 'button', text: 'Reference' })
-    this.referenceMute = el('button', { class: 'pill reference-mute', type: 'button', text: 'Mute' })
-    this.referenceVolume = el('input', {
-      class: 'reference-volume',
-      type: 'range',
-      min: '0',
-      max: '100',
-      step: '1',
-      'aria-label': 'Reference volume',
-    }) as HTMLInputElement
-    this.referenceChip.addEventListener('click', () => this.handlers.onReference())
-    this.referenceMute.addEventListener('click', () =>
-      this.handlers.onReferenceMute(this.referenceMute.getAttribute('aria-pressed') !== 'true'),
-    )
-    this.referenceVolume.addEventListener('input', () =>
-      this.handlers.onReferenceVolume(Number(this.referenceVolume.value) / 100),
-    )
-    this.referenceRow = el('div', { class: 'reference-row', hidden: true }, [
-      this.referenceChip,
-      this.referenceMute,
-      this.referenceVolume,
-    ])
-
     this.nowPlaying = el('footer', { class: 'now-playing', hidden: true }, [
       el('div', { class: 'now-text' }, [
         this.nowTitle,
@@ -144,7 +112,6 @@ export class UI {
       ]),
       this.seekBar,
       el('div', { class: 'times' }, [this.elapsed, this.remaining]),
-      this.referenceRow,
       el('div', { class: 'transport-row' }, [this.restartButton, this.playButton, this.pauseButton]),
     ])
 
@@ -285,43 +252,6 @@ export class UI {
       return
     }
     label.textContent = progress.total > 0 ? `Downloading ${Math.round((progress.loaded / progress.total) * 100)} %` : 'Downloading\u2026'
-  }
-
-  updateReference(state: ReferenceState): void {
-    this.referenceRow.hidden = !state.available
-    const chip = this.referenceChip
-    chip.classList.remove('is-ok', 'is-warn', 'is-busy')
-    chip.setAttribute('aria-pressed', String(state.status !== 'off'))
-    switch (state.status) {
-      case 'off':
-        chip.textContent = 'Reference off'
-        break
-      case 'loading':
-        chip.textContent = 'Downloading reference\u2026'
-        chip.classList.add('is-busy')
-        break
-      case 'on':
-        chip.textContent = 'Reference'
-        chip.classList.add('is-ok')
-        break
-      case 'blocked':
-        chip.textContent = 'Tap to hear reference'
-        chip.classList.add('is-warn')
-        break
-      case 'error':
-        chip.textContent = 'Reference failed'
-        chip.classList.add('is-warn')
-        break
-    }
-    const on = state.status !== 'off'
-    this.referenceMute.disabled = !on
-    this.referenceMute.textContent = state.muted ? 'Unmute' : 'Mute'
-    this.referenceMute.setAttribute('aria-pressed', String(state.muted))
-    this.referenceMute.classList.toggle('is-active', state.muted)
-    this.referenceVolume.disabled = !on
-    const percent = String(Math.round(state.volume * 100))
-    if (this.referenceVolume.value !== percent) this.referenceVolume.value = percent
-    this.referenceVolume.setAttribute('aria-valuetext', `${percent}%`)
   }
 
   updateWake(status: WakeLockStatus): void {
