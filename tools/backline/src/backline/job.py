@@ -24,6 +24,7 @@ BEATS = f"{WORK}/beats.json"  # raw tracker output
 GRID = f"{WORK}/grid.json"  # the grid the song is played to (straight fit or cleaned tracked)
 LYRICS_JSON = f"{WORK}/lyrics.json"
 LYRICS_TXT = f"{WORK}/lyrics.txt"
+WORDS = f"{WORK}/words.json"  # Whisper's word timestamps on the vocal stem, when needed
 
 
 def notes_file(profile: str, primary: str) -> str:

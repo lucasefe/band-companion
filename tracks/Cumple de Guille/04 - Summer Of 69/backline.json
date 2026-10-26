@@ -46,10 +46,8 @@
     "reason": null
   },
   "lyrics": {
-    "source": "lrclib:37357273",
-    "lines": 53,
-    "offset": 0.58,
-    "on_vocal": 0.956
+    "source": "project",
+    "lines": 53
   },
-  "updated": "2026-10-26T15:22:28"
+  "updated": "2026-10-26T15:34:25"
 }

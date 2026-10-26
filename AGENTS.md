@@ -85,7 +85,8 @@ Plain `chrome --headless --screenshot` cannot do phone widths. `scripts/cdp.mjs`
 
 ```
 src/backline/
-  cli.py        typer: add / export / resimplify / lyrics / rename / fx-template / doctor. Rich to stderr.
+  cli.py        typer: add / export / resimplify / lyrics (--align, --replace) / rename /
+                fx-template / doctor (reports mlx-whisper + model cache). Rich to stderr.
   config.py     backline.toml (found upwards from cwd, else repo root); song_folder() numbering
   catalog.py    backline.json per song folder: write_record(), find_by_hash() for dedupe
   pipeline.py   stages + per-job caching (_Runner), RunOptions/RunResult, output-folder resolution
@@ -96,6 +97,14 @@ src/backline/
   tempo.py      Beat This! → beats/downbeats/bpm/meter
   simplify.py   peaks → notes; PROFILES (conservative / daring thresholds)
   lyrics.py / lrclib.py   identification, LRCLIB lookup + ranking, vocal-stem offset check, LRC I/O
+  align.py      Whisper (mlx-whisper, large-v3-turbo, Apple Silicon only; optional dep) word
+                timestamps on work/vocals.wav → work/words.json (cached on model+language);
+                realign(reference, lines, words, duration): per-line offset candidates from
+                where each line's tokens were heard (SequenceMatcher ratio ≥ 0.6), Viterbi over
+                lines with a section anchor (within JITTER 0.75 s free, anchor nudged ≤ DRIFT
+                0.15 s; further = new section, cost 2 + 0.02·Δ), heard words consumed in order
+                (a later line may only match later words — or every written chorus buys the one
+                heard), unheard lines carry the offset, lines past the end → None
   midi_out.py   CountIn, TempoMap, Layout, build_sequence() → Sequence; write_midi()
   tempo.py      Beat This! (raw → work/beats.json) and the grid (work/grid.json, what everything
                 downstream uses): regularize() (quarter note within 60–170 bpm, drop double-time
@@ -155,8 +164,15 @@ Rules:
   (line live until the next one, ≤ 6 s, vs activity > 0.35) — only when it beats the best
   pattern score inside ±6 s by ≥ 0.08 does it move the fine window, which then picks by
   agreement first and contrast second (a chorus every 8 bars gives several shifts with good
-  onsets, one with every line sung). Onset contrast alone picked −50.7 s for *The Look* where
-  −23.3 s is right; the 33 s instrumental break is what decides it.
+  onsets, one with every line sung). Onset contrast alone picked −50.7 s for *The Look*; but
+  no constant shift is right for it: every LRCLIB copy is synced to a 4:22 edit (last line at
+  273 s on a 232 s file). When the sync runs > 3 s past the recording, or the gross check
+  fires, or `--align`, `_align_lyrics()` runs Whisper and `realign()` (see align.py); the
+  lyrics stage reports `offset.source = "whisper alignment"` with reason, lines_heard,
+  coverage, shift range, and `lyrics.offset` becomes 0 (times are absolute). Without
+  mlx-whisper it falls back to the constant shift and says so in `offset.note`. Whisper's
+  transcript has holes on sung material (verse 1 of The Look, the fade-out "na na na"): the
+  carry rule is what makes the result usable, not the coverage (38 %).
 - The FX template `~/.config/backline/midi-track.RfxChain` is injected on both MIDI tracks with
   fresh `FXID`s; it is personal and lives outside the repo.
 - Heavy imports (torch, demucs, beat_this) stay inside functions.

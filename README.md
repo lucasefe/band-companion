@@ -74,6 +74,7 @@ backline add <audio-file | URL> [--set "Cumple de Guille"] [--number 3]
 --artist / --title    override what was read from tags, the YouTube title, or the file name
 --lyrics-file FILE    use your own .lrc/.txt instead of looking lyrics up
 --lyrics-offset SEC   shift the lyrics by hand (skips the automatic check)
+--align               time the lines from the recording (Whisper) even if the sync looks fine
 --no-lyrics
 --count-in BARS       default 2 (backline.toml); 0 = none
 --grid MODE           auto (default) | straight | tracked — see The beat grid
@@ -83,7 +84,7 @@ backline add <audio-file | URL> [--set "Cumple de Guille"] [--number 3]
 
 backline export [<job>]                       song folder(s) from the saved project(s): markers → .lrc, newest render → .wav
 backline resimplify <job> [--count-in 0 … --overwrite]   regenerate MIDI (and the project, if it is still ours) from the cached analysis
-backline lyrics <job> [--artist … --title … --offset … --replace]   look the lyrics up again; --replace puts them into a saved project
+backline lyrics <job> [--artist … --title … --offset … --align --replace]   look the lyrics up again; --replace puts them into a saved project
 backline rename <job> --title … [--artist …]  fix the name everywhere: job, project, song folder, files (render included)
 backline fx-template <Title.RPP>              remember your drum VSTi
 backline doctor
@@ -182,11 +183,19 @@ channel, or the file name, and looked up on LRCLIB (open, no account). Candidate
 name similarity, duration and whether they are time-synced. The result is checked against the
 isolated vocal: a gross mismatch (a music video with a longer intro than the album cut) is
 corrected with a constant shift; small disagreements are left alone because LRC lines are
-conventionally tagged a touch early. Lyrics synced to another edit altogether — LRCLIB's
-*The Look* runs 23 s late against the single — are caught by matching the sung/silent
-pattern of the whole song (a repeated chorus can fool line onsets, an instrumental break
-cannot) and shifted the same way; `backline.json` says `vocal stem (another edit)` when that
-happened. `work/lyrics.json` records what was considered and why.
+conventionally tagged a touch early.
+
+**Lyrics synced to another edit of the song** (every LRCLIB copy of *The Look* was timed
+against a 4:22 cut; the single is 3:52) cannot be fixed by any constant shift. They are
+recognised — the sync runs past the end of the recording, or the sung/silent pattern of the
+whole song fits far better somewhere else — and then **timed from the recording**: Whisper
+(`mlx-whisper`, Apple Silicon) transcribes the isolated vocal with word timestamps, each line
+is matched to where its words were heard, and lines nobody heard keep their relative timing
+to the nearest line that was (the performance is the same, only the edit differs; a chorus
+sung four times goes to the right one of its four places). `--align` forces it. The summary
+says *timed from the recording: 34/88 lines heard, shifts −27.0…−22.8 s*, and
+`work/words.json` keeps the transcript. The model (~1.6 GB) downloads on first use;
+`backline doctor` tells. `work/lyrics.json` records what was considered and why.
 Studio recordings only — a live or cover version gets the right words at the wrong times.
 
 ### `backline.toml`
@@ -406,6 +415,7 @@ sequenceDiagram
 - `transcribe.py` — ADTOF: five drum classes at 100 frames/s. `simplify.py` picks peaks with two threshold profiles.
 - `tempo.py` — Beat This!: beats, downbeats, BPM.
 - `lyrics.py` / `lrclib.py` — identification, lookup, ranking, and the vocal-stem timing check.
+- `align.py` — Whisper word timestamps on the vocal stem (`transcribe_words`, cached in `work/words.json`) and `realign()`: one offset per line chosen by a dynamic programme that pays for every change of offset and consumes what was heard in order.
 - `midi_out.py` — one `Sequence` (count-in, shift, note ticks) feeds both the `.mid` writer and the Reaper project, so they can never disagree.
 - `reaper.py` — the practice-mix project, your FX chain, render settings; lyric markers written, read back (`read_markers`) and swapped in place (`replace_markers`) in a project Reaper has saved.
 - `pipeline.py` — stages with per-job caching; `config.py` — `backline.toml` and song folders.
@@ -438,7 +448,8 @@ magick -background '#0b0b0d' -density 384 icon-maskable.svg -resize 180x180 appl
 - Five drum classes: all toms are one note, crash and ride are one note, no open/closed hi-hat.
 - The MIDI and the project use one tempo (the fitted one); for the few recordings that drift, the count-in and the bar lines are right at the start and slowly diverge — a per-beat tempo map is planned.
 - Drum notes are not quantized yet; grid-snapped styles are planned.
-- Lyrics need the song to exist on LRCLIB; originals come back "not found" (a Whisper fallback is planned).
+- Lyrics need the song to exist on LRCLIB; originals come back "not found". Whisper is only used to *time* known words; transcribing lyrics from scratch is planned.
+- Whisper alignment needs Apple Silicon (`mlx-whisper`); elsewhere a sync for another edit gets the best constant shift and a note.
 - `yt-dlp` breaks when YouTube changes; `mise upgrade yt-dlp` fixes it.
 
 See `docs/PLAN.md` for the importer's design and roadmap, `AGENTS.md` for working conventions.

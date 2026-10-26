@@ -97,6 +97,9 @@ def add(
     lyrics_offset: float | None = typer.Option(
         None, help="Shift lyrics by this many seconds instead of measuring against the vocals."
     ),
+    align: bool = typer.Option(
+        False, help="Time the lyric lines from the recording (Whisper), not from the lookup."
+    ),
 ) -> None:
     """Add a song: analyse SOURCE and write the Reaper project (drums as MIDI, lyrics as
     markers) that renders into the song's folder. From then on the project is the source."""
@@ -125,6 +128,7 @@ def add(
         title=title,
         lyrics_file=lyrics_file,
         lyrics_offset=lyrics_offset,
+        align=align,
     )
     _execute(lambda reporter: run_pipeline(source, opts, reporter, cfg))
 
@@ -241,6 +245,9 @@ def lyrics_cmd(
     lyrics_offset: float | None = typer.Option(
         None, "--offset", help="Shift lyrics by this many seconds (skips the vocal-stem check)."
     ),
+    align: bool = typer.Option(
+        False, help="Time the lines from the recording (Whisper) even if the sync looks fine."
+    ),
     replace: bool = typer.Option(
         False,
         help="Swap the markers of a project Reaper has saved for the lines found "
@@ -262,6 +269,7 @@ def lyrics_cmd(
             title=title,
             lyrics_file=lyrics_file,
             lyrics_offset=lyrics_offset,
+            align=align or None,
         )
     )
     if result.project_kept and not result.lyrics_replaced:
@@ -465,6 +473,15 @@ def _lyrics_summary(info: dict) -> str:
     off = info.get("offset") or {}
     if off.get("source") == "manual":
         parts.append(f"offset {off['applied']:+.2f}s (manual)")
+    elif off.get("source") == "whisper alignment":
+        parts.append(
+            f"[yellow]timed from the recording[/] ({escape(off['reason'])}): "
+            f"{off['lines_heard']}/{off['lines']} lines heard"
+            + (f", {off['lines_dropped']} past the end" if off.get("lines_dropped") else "")
+            + f", shifts {off.get('shift_min', 0):+.1f}…{off.get('shift_max', 0):+.1f}s"
+        )
+        if off.get("agreement_at_applied") is not None:
+            parts.append(f"on-vocal {off['agreement_at_applied']:.0%}")
     elif off:
         applied, suggested = off.get("applied", 0.0), off.get("suggested", 0.0)
         if applied:
@@ -473,7 +490,21 @@ def _lyrics_summary(info: dict) -> str:
             parts.append(f"offset 0 (vocals suggest {suggested:+.2f}s)")
         if off.get("agreement_at_applied") is not None:
             parts.append(f"on-vocal {off['agreement_at_applied']:.0%}")
+        if off.get("note"):
+            parts.append(f"[yellow]{escape(off['note'])}[/]")
     return " · ".join(parts)
+
+
+def _whisper_status() -> tuple[bool, str]:
+    from backline.align import WHISPER_MODEL
+
+    ok, version = _module_version("mlx_whisper")
+    if not ok:
+        return False, "not installed (Apple Silicon only) — lyrics synced to another edit stay off"
+    hub = Path.home() / ".cache" / "huggingface" / "hub"
+    cached = (hub / ("models--" + WHISPER_MODEL.replace("/", "--"))).exists()
+    state = "cached" if cached else "downloads on first use (~1.6 GB)"
+    return True, f"{version}; {WHISPER_MODEL} {state}"
 
 
 def _binary_version(name: str, *args: str) -> tuple[bool, str]:
@@ -520,6 +551,7 @@ def doctor() -> None:
         ("beat_this", *_module_version("beat_this")),
         ("librosa", *_module_version("librosa")),
         ("mido", *_module_version("mido")),
+        ("mlx_whisper", *_whisper_status()),
     ]
 
     table = Table(show_header=False, box=None, pad_edge=False)

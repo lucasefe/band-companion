@@ -43,6 +43,7 @@ class RunOptions:
     title: str | None = None
     lyrics_file: Path | None = None
     lyrics_offset: float | None = None  # None = measure against the vocal stem
+    align: bool = False  # time the lines from the recording (Whisper) even if the sync looks fine
 
 
 class Reporter(Protocol):
@@ -505,6 +506,7 @@ class _Runner:
             "title": opts.title,
             "file": str(opts.lyrics_file) if opts.lyrics_file else None,
             "offset": opts.lyrics_offset,
+            "align": opts.align,
         }
         self.stage("lyrics", lyrics_params, self._do_lyrics, [J.LYRICS_JSON], detail="lrclib")
         lyrics_info = json.loads(job.path(J.LYRICS_JSON).read_text())
@@ -780,7 +782,8 @@ class _Runner:
                 lyrics.offset = opts.lyrics_offset
                 payload["offset"] = {"applied": lyrics.offset, "source": "manual"}
             elif job.path(J.VOCALS).exists():
-                est = estimate_offset(lyrics, vocal_activity(job.path(J.VOCALS)))
+                activity = vocal_activity(job.path(J.VOCALS))
+                est = estimate_offset(lyrics, activity)
                 lyrics.offset = est.applied
                 lyrics.confidence = est.agreement_at_applied
                 payload["offset"] = {
@@ -792,6 +795,21 @@ class _Runner:
                 }
                 if est.gross:
                     payload["offset"]["gross"] = est.gross
+                # A sync made against another edit of the song cannot be fixed by a constant
+                # shift (a longer intro here, a cut solo there): time the lines from the
+                # recording itself.
+                last = max(ln.time for ln in lyrics.timed)
+                reason = (
+                    "requested"
+                    if opts.align
+                    else "sync runs past the end of this recording"
+                    if last > duration + 3.0
+                    else "sync is for another edit"
+                    if est.gross
+                    else None
+                )
+                if reason:
+                    self._align_lyrics(lyrics, activity, duration, reason, payload)
 
         job.path(J.LYRICS_TXT).write_text(plain_text(lyrics), encoding="utf-8")
         payload.update(
@@ -811,6 +829,36 @@ class _Runner:
         who = f"{lyrics.meta.get('artist', '?')} – {lyrics.meta.get('title', '?')}"
         kind = f"{len(lyrics.timed)} lines" if lyrics.synced else "text only"
         return {"detail": f"{who} · {kind}", "source": lyrics.source}
+
+    def _align_lyrics(self, lyrics, activity, duration, reason, payload) -> None:
+        from backline.align import realign, summary, transcribe_words, whisper_available
+        from backline.lyrics import Line, estimate_offset
+
+        job = self.job
+        if not whisper_available():
+            payload["offset"]["note"] = (
+                f"{reason}; mlx-whisper is not installed, so only a constant shift was applied"
+            )
+            return
+        self.reporter.stage("lyrics", "whisper on the vocal stem")
+        words = transcribe_words(job.path(J.VOCALS), job.path(J.WORDS))
+        timed = lyrics.timed
+        aligned = realign([ln.time for ln in timed], [ln.text for ln in timed], words, duration)
+        kept = [
+            Line(t, ln.text) for t, ln in zip(aligned.times, timed, strict=True) if t is not None
+        ]
+        lyrics.lines = kept
+        lyrics.offset = 0.0
+        check = estimate_offset(lyrics, activity)
+        lyrics.confidence = check.agreement_at_zero
+        payload["offset"] = {
+            "source": "whisper alignment",
+            "reason": reason,
+            "applied": 0.0,
+            "agreement_at_applied": check.agreement_at_zero,
+            "constant_shift_was": payload["offset"].get("applied", 0.0),
+            **summary(aligned, [ln.time for ln in timed]),
+        }
 
     def _write_lyrics_json(self, payload: dict[str, Any]) -> None:
         from backline.lyrics import save_lyrics_json
